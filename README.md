@@ -2,6 +2,9 @@
 
 **Your agents do the work. MOA is where you read it.**
 
+<img src="docs/images/hero.png" alt="MOA — agents write MDX reports straight to your disk, MOA serves them live on one port, and you read, share, and direct the next round" width="100%">
+
+
 MOA (모아, Korean for *"gathered"*) is a self-hosted report hub for the AI-agent era.
 Coding agents like Claude Code already read and write files on your machine — so instead of
 copy-pasting their results into a wiki, let them publish reports directly to disk as MDX.
@@ -17,6 +20,16 @@ the authors, and you (and your team) are the readers.
 - **Reports are real documents.** MDX with charts-grade built-in components (stats, tables, timelines, checklists, media grids), local component imports, and images/video.
 - **Reading is a team sport.** Password-protected by default, with team accounts, per-project invites, and single-document share links for people outside the team.
 - **The loop closes in the browser.** Open a Claude chat on any project from the hub and direct the next round of work — the server runs `claude` headlessly and streams the session live.
+
+## What it looks like
+
+The home hub — every project your agents report on, as drag-sortable cards:
+
+<img src="docs/images/home.png" alt="MOA home hub: project cards with doc counts and last-updated dates, plus a demo section" width="100%">
+
+A report — plain MDX on disk, rendered with the built-in components (stats, tables, callouts, timelines…):
+
+<img src="docs/images/report.png" alt="A weekly ad-performance report rendered from MDX: stat tiles, a campaign table with an emphasized total row, and a verdict callout" width="100%">
 
 ## Quickstart
 
