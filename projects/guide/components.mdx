@@ -1,0 +1,121 @@
+export const order = 2
+export const title = 'Component Catalog'
+export const group = 'Guide'
+export const date = '2026-08-09'
+
+# Component Catalog
+
+All of these work in MDX with no imports. Everything below is rendered live.
+
+## Stats — Key Metrics
+
+```mdx
+<Stats items={[
+  { label: 'Final cut', value: '2:30.4', sub: '27 clips · 1080p' },
+  { label: 'Total cost', value: '$156.80', accent: true, sub: 'P2+P2.5+P3' },
+]} />
+```
+
+<Stats items={[
+  { label: 'Final cut', value: '2:30.4', sub: '27 clips · 1080p' },
+  { label: 'Re-rolls', value: '6', sub: '4 of 13 clips' },
+  { label: 'Total cost', value: '$156.80', accent: true, sub: 'P2+P2.5+P3' },
+]} />
+
+## DataTable — Measured Numbers
+
+Rows whose first cell is `Total` are highlighted automatically.
+
+<DataTable
+  cols={['Stage', 'Clips', 'Cost', 'Re-rolls']}
+  rows={[
+    ['P1 pilot', '4', '$12.80', '1'],
+    ['P2 full run', '13', '$41.60', '3'],
+    ['Total', '17', '$54.40', '4'],
+  ]}
+  note="* Use the note prop to add a footnote under the table."
+/>
+
+## Checks — Checklist
+
+Items starting with `✅ ` are rendered as done.
+
+<Checks items={[
+  '✅ Script pronunciation pass',
+  '✅ Pilot 4 clips passed QC',
+  'Generate remaining 13 clips',
+  'Final assembly + numeric verification',
+]} />
+
+## Issues — Issue Tracking
+
+`sev`: `high` (top priority) · `warn` (caution) · `done` (resolved)
+
+<Issues items={[
+  { sev: 'high', t: 'Lip-sync drift', d: 'clip 07 · 0.3s — needs a re-roll' },
+  { sev: 'warn', t: 'Background tone variance', d: 'clip 11 · coverable with color grading' },
+  { sev: 'done', t: 'Boundary freeze frames', d: 'all 26 boundaries removed (v5)' },
+]} />
+
+## Timeline — Schedule
+
+<Timeline items={[
+  { d: '08-07', t: 'Plan locked · script v3' },
+  { d: '08-09', t: 'Pilot 4-clip QC', accent: true, now: true },
+  { d: '08-11', t: 'Full generation + assembly' },
+]} />
+
+## Progress — Progress Bar
+
+<Progress label="Full generation" value={62} sub="17 of 27 clips done" />
+
+## Callout — Highlight Box
+
+`type`: `info` · `warn` · `success` · `danger`
+
+<Callout type="warn" title="Caution">
+Each re-roll costs $3.20 per clip. Pass the QC gates first, then move on to full generation.
+</Callout>
+
+<Callout type="success" title="Passed">
+All 5 human-ear proxy gates passed — clear to proceed to assembly.
+</Callout>
+
+## Badge — Status Badge
+
+`tone`: `live` · `wait` · `done` · `muted` — <Badge tone="live">In progress</Badge> <Badge tone="wait">Waiting</Badge> <Badge tone="done">Done</Badge> <Badge tone="muted">Archived</Badge>
+
+## Lessons — Keep / Fix
+
+<Lessons
+  keep={[{ t: 'Phonetic respelling', d: 'Spelling tricky words phonetically in the script eliminates mispronunciations.' }]}
+  fix={[{ t: 'Full run without a pilot', d: 'Generating all 27 clips blind tripled the re-roll cost.', fix: 'Full run only after a 4-clip pilot passes QC' }]}
+/>
+
+## Rules — Rule Cards
+
+<Rules items={[
+  { no: 'R1', t: 'Pilot first', d: 'Always run a 4-clip pilot through QC before full generation.' },
+  { no: 'R2', t: '5 QC gates', d: 'Voice, word pronunciation, boundaries, sync, tone — all must pass before assembly.' },
+  { no: 'R3', t: 'Measured numbers only', d: 'Report figures are all measured. Estimates must be labeled.' },
+]} />
+
+## MediaGrid — Image/Video Grid
+
+```mdx
+<MediaGrid cols={3} items={[
+  { src: '/my-project/still-01.png', cap: 'Shot 1' },
+  { src: '/my-project/clip-01.mp4', cap: 'Clip 1', video: true },
+]} />
+```
+
+## Misc
+
+`Updated` (last-updated marker) · `FooterNote` (bottom footnote) · Markdown tables (GFM) are also supported:
+
+| Item | Value |
+| --- | --- |
+| GFM tables | Supported |
+| Header style | uppercase th with letter-spacing |
+
+<FooterNote>This document is its own showcase — open the projects/guide/components.mdx source to see the full usage.</FooterNote>

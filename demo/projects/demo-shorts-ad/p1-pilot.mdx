@@ -1,0 +1,42 @@
+export const order = 2
+export const title = 'P1 · Pilot — 3-Clip QC'
+export const group = 'Pipeline'
+export const date = '2026-08-08'
+
+# P1 — Pilot: 3 Clips Generated · QC Gates (demo data)
+
+<Updated at="2026-08-08 · 4 of 5 QC gates passed" />
+
+<Stats items={[
+  { label: 'Generated', value: '3 clips', sub: '4 takes incl. 1 re-roll' },
+  { label: 'QC passed', value: '4/5', accent: true, sub: '1 boundary gate on hold' },
+  { label: 'Stage cost', value: '$12.80', sub: '4 takes × $3.20' },
+]} />
+
+## QC Gate Results
+
+<DataTable
+  cols={['Gate', 'Verdict', 'Notes']}
+  rows={[
+    ['Voice consistency', 'Pass', 'same speaker tone across 3 clips'],
+    ['Word pronunciation', 'Pass', '0 mispronounced brand names'],
+    ['Lip sync', 'Pass', 'delay under 0.1s'],
+    ['Background tone', 'Pass', 'kitchen tone consistent'],
+    ['Clip boundaries', 'Hold', '0.4s freeze at clip 2→3 boundary'],
+  ]}
+/>
+
+<Issues items={[
+  { sev: 'high', t: 'Freeze frame at clip 2→3 boundary', d: '0.4s silent freeze — will be fixed by trimming at assembly' },
+  { sev: 'done', t: 'Mispronounced brand name in clip 1', d: 'respelled phonetically, 1 re-roll — resolved' },
+]} />
+
+## Progress
+
+<Progress label="Pipeline overall" value={40} sub="P0 done · P1 QC 4/5 · P2 pending" />
+
+<Callout type="warn" title="P2 entry criteria">
+The held boundary gate is judged coverable by the assembly-stage trim rule — P2 approved. However, if the same symptom appears in 3+ clips after full generation, retune the generation parameters.
+</Callout>
+
+<FooterNote>Demo data — not real QC results.</FooterNote>

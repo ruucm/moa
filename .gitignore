@@ -1,0 +1,18 @@
+node_modules/
+.next/
+.DS_Store
+*.log
+
+# Local instance data — never commit these.
+.env*
+!.env.example
+users.json
+shares.json
+registry.json
+registry.json.bak*
+
+# Your projects and media live here locally; only the bundled guide ships with the repo.
+projects/*
+!projects/guide
+public/*
+!public/.gitkeep

@@ -1,0 +1,50 @@
+export const order = 3
+export const title = 'P2 · Full Run — Generate · Assemble'
+export const group = 'Pipeline'
+export const date = '2026-08-09'
+
+# P2 — Remaining 6 Clips Generated → 9-Clip Assembly (demo data)
+
+<Updated at="2026-08-09 · v2 assembly complete" />
+
+<Stats items={[
+  { label: 'Final cut', value: '0:44.8', sub: '9 clips · 1080×1920 · v2' },
+  { label: 'Re-rolls', value: '2', sub: '2 of 6 clips' },
+  { label: 'Total cost', value: '$38.40', accent: true, sub: 'closed under the $43.20 budget' },
+]} />
+
+## Measured by Stage
+
+<DataTable
+  cols={['Stage', 'Clips', 'Takes', 'Cost']}
+  rows={[
+    ['P1 pilot', '3', '4', '$12.80'],
+    ['P2 full run', '6', '8', '$25.60'],
+    ['Total', '9', '12', '$38.40'],
+  ]}
+  note="* Demo numbers. Re-roll rate 33% — parameters tuned in the pilot kept us under budget."
+/>
+
+## Assembly Checks
+
+<Checks items={[
+  '✅ Freeze frames trimmed at every boundary (8 boundaries)',
+  '✅ Loudness normalized to -14 LUFS',
+  '✅ Subtitle sync verified numerically (drift under 0.08s)',
+  'Awaiting client sign-off',
+]} />
+
+<Callout type="success" title="Ready for delivery">
+The v2 assembly passed numeric verification. Only client sign-off remains.
+</Callout>
+
+<Lessons
+  keep={[
+    { t: 'Pilot QC first', d: 'Kept the full-run re-roll rate at 33% — the key to closing under budget.' },
+  ]}
+  fix={[
+    { t: 'Boundary freeze frames', d: 'Occur every time at the generation stage.', fix: 'Make the assembly trim rule a pipeline default' },
+  ]}
+/>
+
+<FooterNote>Demo data — not a real deliverable. To attach video files, place them in public/demo-shorts-ad/ and reference them with a video tag or MediaGrid.</FooterNote>

@@ -1,0 +1,31 @@
+{
+  "name": "moa",
+  "version": "0.1.0",
+  "description": "MOA — a self-hosted report hub for the AI-agent era. Your agents write MDX reports straight to disk; MOA turns them into a live, shareable workspace.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ruucm/moa.git"
+  },
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev -p 5001 -H 0.0.0.0",
+    "build": "next build",
+    "start": "next start -p 5001 -H 0.0.0.0",
+    "set-password": "node scripts/set-password.mjs",
+    "add-user": "node scripts/add-user.mjs"
+  },
+  "dependencies": {
+    "@mdx-js/esbuild": "^3.1.1",
+    "@mdx-js/react": "^3.1.1",
+    "esbuild": "^0.28.2",
+    "next": "^15.5.23",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "remark-gfm": "^4.0.1"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true
+  }
+}

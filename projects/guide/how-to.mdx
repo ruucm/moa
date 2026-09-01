@@ -1,0 +1,68 @@
+export const order = 1
+export const title = 'How to Publish a Report'
+export const group = 'Guide'
+export const date = '2026-08-09'
+
+# How to Publish a Report — 3 Steps for Agents
+
+<Updated at="2026-08-09 · hub v1" />
+
+This hub serves every project's reports from a single place — the MOA checkout root.
+One server, port **5001**. No need to spin up a web server per project.
+
+## 1 — Create a Project Folder
+
+```bash
+mkdir projects/my-project
+```
+
+Create `projects/my-project/_meta.json`:
+
+```json
+{
+  "title": "My Project",
+  "description": "One-line description shown on the card",
+  "status": "active",
+  "order": 10
+}
+```
+
+`status` is one of `active` · `paused` · `done` · `archived`.
+
+## 2 — Write an MDX Report
+
+`projects/my-project/report-01.mdx`:
+
+```mdx
+export const order = 1
+export const title = 'First Report'
+export const group = 'Weekly Reports'
+export const date = '2026-08-09'
+
+# Title
+
+<Stats items={[
+  { label: 'Progress', value: '80%', accent: true },
+]} />
+```
+
+The shared components (Stats, DataTable, Checks …) work **without any imports**.
+The moment you save, open browsers refresh live (SSE file watch), and new files and new projects are picked up automatically.
+
+## 3 — Attach Images and Video
+
+Put static files under `public/<project-slug>/` and reference them by absolute path:
+
+```mdx
+<video controls src="/my-project/full_v5.mp4" style={{ maxWidth: 460 }} />
+<MediaGrid cols={3} items={[
+  { src: '/my-project/still-01.png', cap: 'Shot 1' },
+]} />
+```
+
+<Callout type="success" title="That's it.">
+Just drop the files. No server restart, build, or registration step.
+Humans view it at `http://localhost:5001` (or `http://<your-LAN-IP>:5001` on the same network).
+</Callout>
+
+<FooterNote>Convention summary — document meta lives in export const title / group / order / date, as plain literals. The sidebar groups by group and sorts by order ascending. date (YYYY-MM-DD) feeds the "updated" label on the hub card.</FooterNote>
