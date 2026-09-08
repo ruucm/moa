@@ -2,15 +2,15 @@
 
 **Your agents do the work. MOA is where you read it.**
 
-<img src="docs/images/hero.png" alt="MOA — agents write MDX reports straight to your disk, MOA serves them live on one port, and you read, share, and direct the next round" width="100%">
-
 A self-hosted report hub for the AI-agent era. Agents (Claude Code etc.) write MDX
 reports straight to your disk — MOA serves them as a live, shareable workspace on one
 port. No uploads, no typing.
 
-<img src="docs/images/home.png" alt="MOA home hub: project cards with doc counts and last-updated dates" width="100%">
+<img src="docs/images/home.png" alt="MOA home hub: a quiet project list with search, status filters, and report counts" width="100%">
 
 <img src="docs/images/report.png" alt="An MDX report rendered with built-in components: stat tiles, tables, callouts" width="100%">
+
+Screenshots show fictional sample projects in the English interface.
 
 ## Quickstart
 
@@ -56,5 +56,11 @@ Claude Code skills ship in [`.agents/skills/`](.agents/skills).
 
 All optional — see [`.env.example`](.env.example). Production: `npm run build && npm start`.
 macOS-first (Claude chat assumes it); the viewer runs anywhere Node 18+ does.
+
+## Design system and verification
+
+Shared styles live in `styles/`, interface components in `components/ui/`, and
+MDX report components in `components/report/`. See [the verification guide](docs/design-verification.md)
+for feature coverage and instructions to reproduce the English screenshots.
 
 [MIT](LICENSE)

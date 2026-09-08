@@ -1,0 +1,58 @@
+/* Compatibility for report authors using the original public classes. */
+:where(.moa-prose, .page) :where(.card) { min-width: 0; background: var(--card); border: 1px solid var(--hairline); border-radius: var(--radius-md); padding: var(--space-6); }
+:where(.moa-prose, .page) :where(.grid2) { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: var(--space-6); }
+:where(.moa-prose, .page) :where(.grid3) { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: var(--space-5); }
+:where(.moa-prose, .page) :where(.row) { display: flex; align-items: baseline; gap: var(--space-4); padding-block: var(--space-3); border-top: 1px solid var(--hairline); }
+:where(.moa-prose, .page) :where(.row:first-of-type) { border-top: 0; padding-top: 0; }
+:where(.moa-prose, .page) :where(.row > *) { min-width: 0; }
+:where(.moa-prose, .page) :where(.klabel) { font-size: var(--font-size-xs); font-weight: 600; color: var(--muted); letter-spacing: .02em; }
+.table-wrap { max-width: 100%; overflow-x: auto; overscroll-behavior-x: contain; margin-block: var(--space-6); border: 1px solid var(--hairline); border-radius: var(--radius-md); }
+.table-wrap > table { margin: 0; display: table; }
+:where(.moa-prose, .page) :where(.stats) { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr)); gap: var(--space-6); margin-block: var(--space-8); }
+:where(.moa-prose, .page) :where(.stat) { border-top: 1px solid var(--hairline); padding-top: var(--space-4); }
+:where(.moa-prose, .page) :where(.stat .label, .stat .sub) { font-size: var(--font-size-xs); color: var(--muted); }
+:where(.moa-prose, .page) :where(.stat .value) { font-size: var(--font-size-2xl); color: var(--ink); font-weight: 650; }
+:where(.moa-prose, .page) :where(.stat.accent .value) { color: var(--accent); }
+:where(.moa-prose, .page) :where(.badge, .pill) { display: inline-block; padding: .2em .65em; border-radius: var(--radius-full); font-size: var(--font-size-xs); background: var(--color-surface-subtle); color: var(--body); font-weight: 600; }
+:where(.moa-prose, .page) :where(.badge.live, .status-live) { color: var(--green); }
+:where(.moa-prose, .page) :where(.badge.wait, .status-wait, .pill) { color: var(--accent); }
+:where(.moa-prose, .page) :where(.footer-note) { margin-top: var(--space-12); padding-top: var(--space-6); border-top: 1px solid var(--hairline); font-size: var(--font-size-xs); color: var(--muted); white-space: pre-line; }
+:where(.moa-prose, .page) :where(.updated) { margin-bottom: var(--space-6); font-size: var(--font-size-xs); color: var(--muted); }
+:where(.moa-prose, .page) :where(.callout) { padding: var(--space-5); margin-block: var(--space-6); background: var(--card); border: 1px solid var(--hairline); border-left-width: 3px; border-radius: var(--radius-md); }
+:where(.moa-prose, .page) :where(.callout.info) { border-left-color: var(--color-info-text); background: var(--color-info-surface); }
+:where(.moa-prose, .page) :where(.callout.warn) { border-left-color: var(--color-warning-text); background: var(--color-warning-surface); }
+:where(.moa-prose, .page) :where(.callout.success) { border-left-color: var(--color-success-text); background: var(--color-success-surface); }
+:where(.moa-prose, .page) :where(.callout.danger) { border-left-color: var(--color-danger-text); background: var(--color-danger-surface); }
+:where(.moa-prose, .page) :where(.callout-title) { color: var(--ink); font-size: var(--font-size-base); font-weight: 600; }
+:where(.moa-prose, .page) :where(.callout.info .callout-title) { color: var(--color-info-text); }
+:where(.moa-prose, .page) :where(.callout.warn .callout-title) { color: var(--color-warning-text); }
+:where(.moa-prose, .page) :where(.callout.success .callout-title) { color: var(--color-success-text); }
+:where(.moa-prose, .page) :where(.callout.danger .callout-title) { color: var(--color-danger-text); }
+:where(.moa-prose, .page) :where(.callout-body) { font-size: var(--font-size-md); }
+:where(.moa-prose, .page) :where(.callout-body p) { margin-block: var(--space-1); font-size: inherit; }
+:where(.moa-prose, .page) :where(.check) { display: flex; gap: var(--space-3); padding-block: var(--space-3); border-bottom: 1px solid var(--hairline); }
+:where(.moa-prose, .page) :where(.check .box) { flex: 0 0 18px; height: 18px; border: 1px solid var(--color-border-control); border-radius: .3rem; margin-top: .4em; }
+:where(.moa-prose, .page) :where(.check.done .box) { background: var(--color-success-text); border-color: var(--color-success-text); }
+:where(.moa-prose, .page) :where(.check.done .txt) { color: var(--muted); text-decoration: line-through; }
+:where(.moa-prose, .page) :where(.btn) { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: var(--space-2) var(--space-4); border: 1px solid var(--hairline); border-radius: var(--radius-sm); background: var(--card); color: var(--ink); font: inherit; font-size: var(--font-size-sm); font-weight: 600; }
+:where(.moa-prose, .page) :where(.btn.accent) { color: var(--accent); border-color: var(--color-accent-border); }
+
+/* External JSX may still render these original classes instead of the shared API. */
+:where(.moa-prose, .page) :where(.progress) { margin-block: var(--space-6); }
+:where(.moa-prose, .page) :where(.progress-head) { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-4); margin-bottom: var(--space-2); }
+:where(.moa-prose, .page) :where(.progress-label) { min-width: 0; font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); }
+:where(.moa-prose, .page) :where(.progress-pct) { flex-shrink: 0; color: var(--color-accent-text); font-size: var(--font-size-sm); font-weight: var(--font-weight-bold); font-variant-numeric: tabular-nums; }
+:where(.moa-prose, .page) :where(.progress-track) { height: var(--space-2); background: var(--color-surface-subtle); border-radius: var(--radius-full); overflow: hidden; }
+:where(.moa-prose, .page) :where(.progress-fill) { height: 100%; background: var(--color-accent-solid); border-radius: inherit; transition: width var(--duration-normal); }
+:where(.moa-prose, .page) :where(.progress-sub) { margin-top: var(--space-2); font-size: var(--font-size-xs); color: var(--color-text-muted); }
+:where(.moa-prose, .page) :where(.media-grid) { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(15rem, 100%), 1fr)); gap: var(--space-4); margin-block: var(--space-6); min-width: 0; }
+:where(.moa-prose, .page) :where(.media-grid figure) { min-width: 0; margin: 0; }
+:where(.moa-prose, .page) :where(.media-grid img, .media-grid video) { display: block; width: 100%; max-width: 100%; border: 1px solid var(--color-border-subtle); border-radius: var(--radius-sm); }
+:where(.moa-prose, .page) :where(.media-grid figcaption) { margin-top: var(--space-2); font-size: var(--font-size-xs); color: var(--color-text-muted); }
+@media (max-width: 767px) {
+  /* Older MediaGrid versions set columns inline; preserve their mobile override. */
+  :where(.moa-prose, .page) :where(.media-grid) { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+}
+@media (max-width: 359px) {
+  :where(.moa-prose, .page) :where(.media-grid) { grid-template-columns: minmax(0, 1fr) !important; }
+}

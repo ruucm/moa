@@ -1,7 +1,7 @@
 {
   "name": "moa",
   "version": "0.1.0",
-  "description": "MOA — a self-hosted report hub for the AI-agent era. Your agents write MDX reports straight to disk; MOA turns them into a live, shareable workspace.",
+  "description": "MOA \u2014 a self-hosted report hub for the AI-agent era. Your agents write MDX reports straight to disk; MOA turns them into a live, shareable workspace.",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -14,7 +14,10 @@
     "build": "next build",
     "start": "next start -p 5001 -H 0.0.0.0",
     "set-password": "node scripts/set-password.mjs",
-    "add-user": "node scripts/add-user.mjs"
+    "add-user": "node scripts/add-user.mjs",
+    "dev:review": "node scripts/review-server.mjs",
+    "test:ui": "playwright test",
+    "capture:readme": "node scripts/capture-readme.mjs"
   },
   "dependencies": {
     "@mdx-js/esbuild": "^3.1.1",
@@ -23,9 +26,14 @@
     "next": "^15.5.23",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "remark-gfm": "^4.0.1"
+    "remark-gfm": "^4.0.1",
+    "@radix-ui/react-dialog": "^1.1.23"
   },
   "allowScripts": {
     "esbuild@0.28.2": true
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
+    "@playwright/test": "^1.63.0"
   }
 }

@@ -1,0 +1,8 @@
+.loading { display: grid; gap: var(--space-5); max-width: var(--width-reader); padding-block: var(--space-4); }
+.titleSkeleton { width: 70%; height: 2.5rem; margin-bottom: var(--space-6); }
+.shortSkeleton { width: 60%; }
+.error { display: grid; gap: var(--space-5); }
+.errorActions { display: flex; flex-wrap: wrap; gap: var(--space-4); align-items: flex-start; }
+.details { font-size: var(--font-size-sm); color: var(--color-text-muted); max-width: 100%; padding-top: var(--space-3); }
+.details summary { cursor: pointer; }
+.details pre { white-space: pre-wrap; max-width: 100%; color: var(--color-text-secondary); }

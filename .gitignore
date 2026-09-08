@@ -16,3 +16,9 @@ projects/*
 !projects/guide
 public/*
 !public/.gitkeep
+
+# Isolated UI verification
+.review/
+artifacts/
+test-results/
+playwright-report/
