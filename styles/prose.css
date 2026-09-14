@@ -1,6 +1,6 @@
 /* Low specificity keeps custom report components in control of their own typography. */
-:where(.moa-prose) { min-width: 0; width: 100%; max-width: var(--width-wide); margin-inline: auto; color: var(--color-text-secondary); font-size: var(--font-size-body); line-height: var(--line-height-body); }
-:where(.moa-prose) > :where(h1, h2, h3, h4, p, ul, ol, blockquote, hr) { max-width: var(--width-reader); margin-inline: auto; }
+/* One reading column: every block (text, tables, stats, media) shares the same left/right edges. */
+:where(.moa-prose) { min-width: 0; width: 100%; max-width: var(--width-reader); margin-inline: auto; color: var(--color-text-secondary); font-size: var(--font-size-body); line-height: var(--line-height-body); }
 :where(.moa-prose) :where(h1, h2, h3, h4) { color: var(--color-text-primary); text-wrap: pretty; letter-spacing: -.035em; scroll-margin-top: 6rem; }
 :where(.moa-prose) :where(h1) { margin-block: 0 var(--space-6); font-size: 2.25rem; font-weight: 700; line-height: 1.3; }
 :where(.moa-prose) :where(h2) { margin-block: var(--space-16) var(--space-5); font-size: var(--font-size-xl); font-weight: 650; line-height: 1.4; }
@@ -13,7 +13,7 @@
 :where(.moa-prose) :where(li > ul, li > ol) { margin-block: var(--space-2); }
 :where(.moa-prose) :where(a) { color: var(--color-accent-text); text-decoration-color: var(--color-accent-border); text-underline-offset: 4px; text-decoration-thickness: 1px; }
 :where(.moa-prose) :where(a:hover) { text-decoration-color: currentColor; }
-:where(.moa-prose) :where(blockquote) { padding: var(--space-4) var(--space-6); background: var(--color-surface-subtle); border-left: 3px solid var(--color-border-control); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; margin-block: var(--space-6); color: var(--color-text-secondary); }
+:where(.moa-prose) :where(blockquote) { padding: var(--space-4) var(--space-6); background: var(--color-surface-subtle); border-left: 3px solid var(--color-border-control); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; margin-block: var(--space-6); margin-inline: 0; color: var(--color-text-secondary); }
 :where(.moa-prose) :where(blockquote p:last-child) { margin-bottom: 0; }
 :where(.moa-prose) :where(code) { font-family: var(--font-mono); font-size: .84em; background: var(--color-surface-subtle); color: var(--color-text-primary); border-radius: .3rem; padding: .15em .35em; overflow-wrap: anywhere; word-break: normal; }
 :where(.moa-prose) :where(pre) { max-width: 100%; margin-block: var(--space-6); padding: var(--space-5) var(--space-6); overflow-x: auto; overscroll-behavior-x: contain; background: var(--color-surface-subtle); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-md); line-height: 1.75; }
