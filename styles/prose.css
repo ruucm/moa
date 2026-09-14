@@ -24,6 +24,9 @@
 :where(.moa-prose) :where(hr) { border: 0; height: 1px; background: var(--color-border-subtle); margin-block: var(--space-12); }
 :where(.moa-prose) :where(img, video, iframe) { max-width: 100%; border-radius: var(--radius-md); }
 :where(.moa-prose) :where(figure) { max-width: 100%; margin-inline: 0; }
+/* Standalone media centers in the column; !important beats inline `margin: '8px 0'` in docs. */
+:where(.moa-prose) > :where(img, video, iframe, figure) { display: block; margin-inline: auto !important; }
+:where(.moa-prose) > :where(div:not([class]):has(> :is(img, video))) { justify-content: center; }
 :where(.moa-prose) :where(figcaption) { margin-top: var(--space-2); font-size: var(--font-size-xs); color: var(--color-text-muted); }
 :where(.moa-prose) :where(input[type=checkbox]) { accent-color: var(--color-accent-solid); }
 @media (max-width: 767px) {
