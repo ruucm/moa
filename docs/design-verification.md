@@ -7,7 +7,8 @@ shared styles and React components.
 - `styles/tokens.css`: color, typography, spacing, surfaces, and motion
 - `styles/base.css`, `prose.css`, `legacy.css`: application defaults, reading styles,
   and compatibility with existing report classes
-- `components/ui/`: buttons, fields, dialogs, drawers, feedback, and the shared symbol
+- `components/ui/`: buttons, fields, dialogs, drawers, feedback, icons (a named map
+  onto [Lucide](https://lucide.dev)), and the shared symbol
 - `components/report/`: the existing 14 MDX component exports
 - `features/`: hub, authentication, settings, document navigation, and Claude chat
 - `/p/guide/design-system`: interactive examples of the actual components

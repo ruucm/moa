@@ -23,6 +23,7 @@
     "@mdx-js/esbuild": "^3.1.1",
     "@mdx-js/react": "^3.1.1",
     "esbuild": "^0.28.2",
+    "lucide-react": "^1.46.0",
     "next": "^15.5.23",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
-import { Button, Dialog, EmptyState, Field, Icon, IconButton, InlineAlert, Input, Skeleton, StatusBadge, Textarea } from './ui/index.jsx'
+import { Button, Dialog, EmptyState, Field, Icon, IconButton, iconNames, InlineAlert, Input, Skeleton, StatusBadge, Textarea } from './ui/index.jsx'
 import { Badge, Callout, Checks, DataTable, FooterNote, Issues, Lessons, MediaGrid, Progress, Rules, Stats, Timeline, Updated } from './report/index.jsx'
 import styles from './design-system-catalog.module.css'
 
@@ -30,7 +30,7 @@ export default function DesignSystemCatalog() {
       <div className={styles.introduction}><StatusBadge tone="accent">MOA design system</StatusBadge><p>Calm screens. Comfortable reading.<br />The foundations and components that shape moa.</p><span>All figures, text, and media below are examples for design review.</span></div>
 
       <section className={styles.section} aria-labelledby="catalog-foundations">
-        <div className={styles.sectionHead}><span>01 · FOUNDATIONS</span><h2 id="catalog-foundations">Color and typography</h2><p>Name colors by their purpose and use the same tokens across every screen.</p></div>
+        <div className={styles.sectionHead}><span>01 · FOUNDATIONS</span><h2 id="catalog-foundations">Color, typography, and icons</h2><p>Name colors by their purpose, use the same tokens across every screen, and draw icons from one set.</p></div>
         <div className={styles.swatches}>
           {[
             ['page', 'Page', 'surface-page'], ['panel', 'Panel', 'surface-panel'], ['subtle', 'Subtle surface', 'surface-subtle'],
@@ -42,6 +42,10 @@ export default function DesignSystemCatalog() {
           <div><span>Section heading · 24px</span><p className={styles.typeSection}>Make every story clear</p></div>
           <div><span>Body · 17px / 1.8</span><p className={styles.typeBody}>Give each sentence room to breathe. Type size, line height, and reading width work together so long titles and detailed explanations flow naturally.</p></div>
           <div><span>Caption · 13px</span><p className={styles.typeCaption}>Even small details stay readable with clear contrast.</p></div>
+        </div>
+        <div className={styles.iconBoard}>
+          <div className={styles.iconBoardHead}><span>Icons · Lucide · 1.65px stroke</span><code>{'<Icon name="settings" size={16} />'}</code></div>
+          <ul className={styles.icons} aria-label="Icon set">{iconNames.map((name) => <li key={name}><Icon name={name} size={20} /><code>{name}</code></li>)}</ul>
         </div>
       </section>
 

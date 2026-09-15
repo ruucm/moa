@@ -26,6 +26,12 @@
 .typeBoard .typeSection { font-size: var(--font-size-xl); font-weight: var(--font-weight-semibold); line-height: 1.5; letter-spacing: -.02em; }
 .typeBoard .typeBody { font-size: var(--font-size-body); font-weight: 400; line-height: var(--line-height-body); }
 .typeBoard .typeCaption { color: var(--color-text-muted); font-size: var(--font-size-xs); line-height: 1.8; }
+.iconBoard { margin-top: var(--space-8); padding: var(--space-6); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-md); background: var(--color-surface-panel); }
+.iconBoardHead { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-2) var(--space-4); }
+.iconBoardHead > span { color: var(--color-text-muted); font-size: var(--font-size-xs); }
+.iconBoard code { padding: 0; border: 0; background: none; color: var(--color-text-muted); font-family: var(--font-mono); font-size: var(--font-size-xs); overflow-wrap: anywhere; }
+.icons { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(7.5rem, 100%), 1fr)); gap: var(--space-2); margin: var(--space-5) 0 0; padding: 0; list-style: none; }
+.icons li { display: flex; flex-direction: column; align-items: center; gap: var(--space-2); min-width: 0; margin: 0; padding: var(--space-4) var(--space-2) var(--space-3); border-radius: var(--radius-sm); background: var(--color-surface-page); color: var(--color-text-primary); text-align: center; }
 .examples { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(18rem, 100%), 1fr)); gap: var(--space-5); }
 .example { min-width: 0; margin-block: var(--space-5); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-md); background: var(--color-surface-panel); overflow: clip; }
 .examples > .example { margin: 0; }
