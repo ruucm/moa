@@ -359,3 +359,35 @@ test('English table words stay intact while wide data scrolls inside the table o
   await expect.poll(() => table.evaluate(el => el.scrollLeft)).toBeGreaterThan(0)
   await noOverflow(page)
 })
+
+test('Korean table words stay intact instead of breaking between syllables', async ({ page }) => {
+  await login(page)
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.route('**/api/doc?slug=moa-design&doc=overview', route => route.fulfill({ json: { code: `
+    const React = require('react');
+    const {useMDXComponents} = require('@mdx-js/react');
+    module.exports.default = function KoreanTable() {
+      const {table: Table} = useMDXComponents();
+      const row = (label, flow) => React.createElement('tr', null, React.createElement('td', null, label), React.createElement('td', null, flow));
+      return React.createElement(React.Fragment, null,
+        React.createElement('h1', null, '한글 표 가독성'),
+        React.createElement(Table, null,
+          React.createElement('thead', null, React.createElement('tr', null, React.createElement('th', null, '주차'), React.createElement('th', null, '흐름'))),
+          React.createElement('tbody', null,
+            row('5주 (초안)', '매일 에이전트와 의논해 시장 문서와 현재가를 읽고 주문 제안을 만든 뒤 사람이 승인하는 흐름을 연습한다'),
+            row('6주 (초안)', '리서치와 매매와 리포트를 맡는 서브 에이전트로 팀을 나누고 승인 단계를 제거해 자동 투자로 넘어간다'))));
+    }` } }))
+  await page.goto('/p/moa-design/overview')
+  await expect(page.getByRole('heading', { name: '한글 표 가독성' })).toBeVisible()
+  await page.evaluate(() => globalThis.document.fonts.ready)
+  const brokenWords = await page.locator('article tbody td').evaluateAll(cells => cells.flatMap(cell => {
+    const node = cell.firstChild
+    return [...node.data.matchAll(/\S+/g)].filter(match => {
+      const range = globalThis.document.createRange()
+      range.setStart(node, match.index); range.setEnd(node, match.index + match[0].length)
+      return new Set([...range.getClientRects()].map(rect => Math.round(rect.top))).size > 1
+    }).map(match => match[0])
+  }))
+  expect(brokenWords).toEqual([])
+  await noOverflow(page)
+})
