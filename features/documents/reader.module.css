@@ -59,7 +59,10 @@
 .headerActions { display: flex; align-items: center; gap: var(--space-2); flex-shrink: 0; }
 .mobileMenu { display: none; }
 .documentLayout { display: grid; grid-template-columns: minmax(0, 1fr); max-width: calc(var(--width-wide) + 16rem); margin: 0 auto; padding: var(--space-12) var(--space-10) var(--space-8); }
-.documentMain { min-width: 0; outline: none; scroll-margin-top: var(--space-8); }
+/* How far a wide <Figure> may bleed past the reading column on each side. The layout owns this
+   budget because only it knows the room left beside the column; the chat panel takes it away. */
+.documentMain { min-width: 0; outline: none; scroll-margin-top: var(--space-8); --figure-bleed: 0rem; }
+.withChat .documentMain { --figure-bleed: 0rem; }
 .documentMeta { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-3); max-width: var(--width-reader); margin: 0 auto var(--space-5); color: var(--color-text-muted); font-size: var(--font-size-xs); line-height: 1.65; }
 .documentMeta:empty { display: none; }
 .documentMeta > span + time::before { content: '·'; margin-right: var(--space-3); }
@@ -100,10 +103,16 @@
 .chatDrawer { width: min(32rem, 100vw); border-radius: var(--radius-lg) 0 0 var(--radius-lg); }
 .chatDrawer > div { display: flex; flex: 1; min-height: 0; padding: 0; overflow: hidden; }
 
+@media (min-width: 1152px) {
+  .documentMain { --figure-bleed: 2rem; }
+}
 @media (min-width: 1380px) {
   .documentLayout { grid-template-columns: minmax(0, 1fr) 12rem; gap: var(--space-12); padding: var(--space-12) var(--space-12) var(--space-8); }
   .outline { display: block; }
   .guestShell .documentLayout { max-width: calc(var(--width-wide) + 6rem); }
+}
+@media (min-width: 1600px) {
+  .documentMain { --figure-bleed: 4rem; }
 }
 @media (min-width: 1700px) {
   .withChat { grid-template-columns: 17rem minmax(0, 1fr) 28rem; }

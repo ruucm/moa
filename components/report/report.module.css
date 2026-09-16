@@ -78,6 +78,28 @@
 .mediaFigure { min-width: 0; margin: 0; }
 .media { display: block; width: 100%; max-width: 100%; height: auto; border: 1px solid var(--color-border-subtle); border-radius: var(--radius-md); background: var(--color-surface-subtle); }
 .mediaCaption { margin-top: var(--space-2); color: var(--color-text-muted); font-size: var(--font-size-xs); line-height: 1.7; overflow-wrap: anywhere; }
+.figure { margin-block: var(--space-8); margin-inline: 0; }
+/* The doubled class + !important beat the prose rule that centers standalone media in the column. */
+.figure.figureWide { width: calc(100% + 2 * var(--figure-bleed, 0rem)); max-width: none; margin-inline: calc(-1 * var(--figure-bleed, 0rem)) !important; }
+.figureMedia { display: block; width: 100%; height: auto; border: 1px solid var(--color-border-subtle); border-radius: var(--radius-md); background: var(--color-surface-subtle); }
+.figureCaption { margin-top: var(--space-3); color: var(--color-text-muted); font-size: var(--font-size-xs); line-height: 1.7; text-align: center; overflow-wrap: anywhere; }
+.zoomable { cursor: zoom-in; }
+.zoomable:focus-visible { outline: 2px solid var(--color-accent-solid); outline-offset: 3px; }
+.zoomOverlay { position: fixed; inset: 0; z-index: var(--z-overlay); background: rgb(10 11 9 / 94%); animation: zoomFade var(--duration-normal) var(--ease-out); }
+.zoomViewer { position: fixed; inset: 0; z-index: var(--z-dialog); display: flex; align-items: center; justify-content: center; padding: var(--space-16) var(--space-6); outline: none; cursor: zoom-out; animation: zoomFade var(--duration-normal) var(--ease-out); }
+.zoomImage { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: var(--radius-sm); box-shadow: var(--shadow-lg); }
+.zoomClose, .zoomStep { position: fixed; display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 1px solid rgb(255 255 255 / 22%); border-radius: var(--radius-full); background: rgb(255 255 255 / 10%); color: #fff; cursor: pointer; transition: background var(--duration-fast); }
+.zoomClose:hover, .zoomStep:hover { background: rgb(255 255 255 / 20%); }
+.zoomClose:focus-visible, .zoomStep:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.zoomClose { top: var(--space-5); right: var(--space-5); }
+.zoomStep { top: 50%; translate: 0 -50%; }
+.zoomPrevious { left: var(--space-5); }
+.zoomNext { right: var(--space-5); }
+.zoomCaption { position: fixed; left: 50%; bottom: var(--space-5); translate: -50% 0; display: flex; align-items: center; gap: var(--space-3); max-width: min(48rem, calc(100vw - var(--space-16))); padding: var(--space-2) var(--space-4); border-radius: var(--radius-full); background: rgb(255 255 255 / 8%); color: rgb(255 255 255 / 82%); font-size: var(--font-size-xs); line-height: 1.6; text-align: center; }
+.zoomCount { flex-shrink: 0; color: rgb(255 255 255 / 60%); font-variant-numeric: tabular-nums; }
+@keyframes zoomFade { from { opacity: 0; } to { opacity: 1; } }
+@media (max-width: 767px) { .zoomViewer { padding: var(--space-12) var(--space-2); } .zoomClose { top: var(--space-3); right: var(--space-3); } .zoomPrevious { left: var(--space-2); } .zoomNext { right: var(--space-2); } }
+@media (prefers-reduced-motion: reduce) { .zoomOverlay, .zoomViewer { animation: none; } }
 .srOnly { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 @media (max-width: 767px) { .mediaGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .mediaSingle { grid-template-columns: minmax(0, 1fr); } .stat { padding: var(--space-5); } .statValue { font-size: var(--font-size-xl); } }
 @media (max-width: 479px) { .stat:last-child:nth-child(odd) { grid-column: 1 / -1; } .mediaGrid { grid-template-columns: minmax(0, 1fr); } .panel { padding: var(--space-5); } .issue { grid-template-columns: minmax(0, 1fr); gap: var(--space-2); } .timelineItem { grid-template-columns: var(--space-4) minmax(0, 1fr); column-gap: var(--space-3); } .timelineDot { grid-column: 1; grid-row: 1 / span 2; } .timelineDate { grid-column: 2; grid-row: 1; margin-bottom: var(--space-1); } .timelineContent { grid-column: 2; grid-row: 2; } .table :is(th, td) { overflow-wrap: normal; word-break: keep-all; padding: var(--space-3) var(--space-4); } }

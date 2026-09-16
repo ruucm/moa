@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useId } from 'react'
+import { ZoomableImage } from './lightbox.jsx'
 import styles from './report.module.css'
 
 const cx = (...names) => names.filter(Boolean).join(' ')
@@ -183,9 +184,22 @@ export function MediaGrid({ items = [], cols = 3 }) {
       {items.map((item, index) => <figure key={index} className={styles.mediaFigure}>
         {item.video
           ? <video className={styles.media} controls preload="metadata" src={item.src} aria-label={item.cap || `Video ${index + 1}`} />
-          : <img className={styles.media} src={item.src} alt={item.cap || ''} loading="lazy" />}
+          : <ZoomableImage className={styles.media} src={item.src} cap={item.cap} zoomSrc={item.full} loading="lazy" />}
         {item.cap && <figcaption className={styles.mediaCaption}>{item.cap}</figcaption>}
       </figure>)}
     </div>
+  )
+}
+
+// One piece of media with its caption. `wide` lets it breathe past the reading column,
+// as far as the layout's bleed budget allows (--figure-bleed).
+export function Figure({ src, cap, alt, video = false, wide = false, zoom = true, full }) {
+  return (
+    <figure className={cx(styles.figure, wide && styles.figureWide)}>
+      {video
+        ? <video className={styles.figureMedia} controls preload="metadata" src={src} aria-label={cap || 'Video'} />
+        : <ZoomableImage className={styles.figureMedia} src={src} alt={alt} cap={cap} zoom={zoom} zoomSrc={full} loading="lazy" />}
+      {cap && <figcaption className={styles.figureCaption}>{cap}</figcaption>}
+    </figure>
   )
 }

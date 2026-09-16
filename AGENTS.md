@@ -157,10 +157,15 @@ stdout (NDJSON) — text, tool calls, results. No API key needed (uses the local
 ## Shared components (no import needed — injected via MDXProvider)
 
 `Stats` `DataTable` `Checks` `Issues` `Timeline` `Progress` `Callout` `Badge` `Lessons`
-`Rules` `MediaGrid` `Updated` `FooterNote`
+`Rules` `Figure` `MediaGrid` `Updated` `FooterNote`
 
 Implementation: `components/shared.jsx` · usage with live examples:
 `projects/guide/components.mdx` (in the browser: `/p/guide/components`)
+
+- **Images are click-to-zoom** — `Figure`, `MediaGrid` and Markdown `![]()` images all open the
+  same viewer (`components/report/lightbox.jsx`); every image on the page is one gallery, so
+  ← / → steps through them. A raw `<img>` tag in MDX is left alone by MDX, so it stays static —
+  use `<Figure src cap wide />` instead. Don't hand-roll a lightbox in a document.
 
 - Record measured numbers only; mark estimates as estimates. Label demo/fake data clearly.
 

@@ -8,6 +8,11 @@ export const reviewRoot = path.resolve(path.dirname(fileURLToPath(import.meta.ur
 export const reviewPassword = 'moa-local-review-only'
 export const reviewSecret = 'moa-isolated-review-secret-not-for-production'
 
+// Self-contained sample art: no binary fixture files, and no dependency on the app's public dir.
+const sampleImage = (label) => 'data:image/svg+xml,' + encodeURIComponent(
+  `<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540"><rect width="960" height="540" fill="#efefeb"/><circle cx="742" cy="132" r="54" fill="#e2e4dd"/><path d="M0 402 L188 286 L332 402 L520 250 L724 402 L960 320 V540 H0Z" fill="#d8dad2"/><text x="480" y="500" text-anchor="middle" font-family="system-ui, sans-serif" font-size="26" fill="#20211f">${label}</text></svg>`
+)
+
 const report = `export const title = '더 명확하게, 더 편안하게'
 export const group = '프로젝트 개요'
 export const order = 1
@@ -59,6 +64,12 @@ export const date = '2026-09-07'
 ]} />
 
 <Progress label="이번 주 작업" value={67} sub="예시 작업 12개 중 8개 완료" />
+
+## 화면으로 함께 보기
+
+<Figure src="${sampleImage('예시 이미지 1')}" cap="문서 이미지 예시 1 — 눌러서 원본 크기로 볼 수 있어요." wide />
+
+![문서 이미지 예시 2 — 마크다운 이미지](${sampleImage('예시 이미지 2')})
 
 <FooterNote>예시 프로젝트 · 모든 내용과 수치는 디자인 검수용 가상 데이터입니다.</FooterNote>
 `

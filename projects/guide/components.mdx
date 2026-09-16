@@ -3,6 +3,8 @@ export const title = 'Component Catalog'
 export const group = 'Guide'
 export const date = '2026-08-09'
 
+export const placeholder = 'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="620" viewBox="0 0 1200 620"><rect width="1200" height="620" fill="#20211f"/><circle cx="915" cy="140" r="56" fill="#f0ece1" opacity=".9"/><path d="M0 470 L180 350 L330 470 L520 300 L720 470 L900 380 L1060 470 L1200 400 V620 H0Z" fill="#2f322c"/><path d="M0 540 L260 450 L470 560 L700 470 L960 560 L1200 500 V620 H0Z" fill="#3c4038"/><text x="600" y="300" text-anchor="middle" font-family="system-ui, sans-serif" font-size="30" fill="#b84413">Example image · click to zoom</text></svg>`)
+
 # Component Catalog
 
 All of these work in MDX with no imports. Everything below is rendered live.
@@ -100,7 +102,24 @@ All 5 human-ear proxy gates passed — clear to proceed to assembly.
   { no: 'R3', t: 'Measured numbers only', d: 'Report figures are all measured. Estimates must be labeled.' },
 ]} />
 
+## Figure — One Image, Click to Zoom
+
+`wide` lets the image breathe past the reading column. Every image in a document opens in the
+same viewer, so ← / → step through all of them — no extra markup needed.
+
+```mdx
+<Figure src="/my-project/keyart.jpg" cap="Adopted take. The censer and the phoenix read together." wide />
+<Figure src="/my-project/clip-01.mp4" cap="Clip 1" video />
+```
+
+<Figure src={placeholder} cap="Captions sit under the image. Click it (or press Enter on it) to open the viewer." wide />
+
+Props: `src` · `cap` · `alt` (defaults to `cap`) · `wide` · `video` · `full` (a larger source to
+show in the viewer) · `zoom={false}` to opt out.
+
 ## MediaGrid — Image/Video Grid
+
+Grid images are click-to-zoom as well.
 
 ```mdx
 <MediaGrid cols={3} items={[
@@ -108,6 +127,12 @@ All 5 human-ear proxy gates passed — clear to proceed to assembly.
   { src: '/my-project/clip-01.mp4', cap: 'Clip 1', video: true },
 ]} />
 ```
+
+## Images in Markdown
+
+`![caption](/my-project/still-01.png)` is click-to-zoom too — the alt text becomes the viewer
+caption. A raw `<img>` tag written in MDX is *not* (MDX leaves literal JSX alone), so reach for
+`Figure` or Markdown syntax when you want the viewer.
 
 ## Misc
 
