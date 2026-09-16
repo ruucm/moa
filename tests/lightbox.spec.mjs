@@ -133,3 +133,34 @@ test('뷰어의 포커스와 스크롤은 닫을 때까지 문서로 빠져나�
   await expect(viewer(page)).toBeHidden()
   await expect(image).toBeFocused()
 })
+
+test('긴 설명이 세로 이미지를 덮지 않고 화면 회전에도 잘리지 않는다', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await openDocument(page)
+  const image = page.locator('.moa-prose img[data-zoomable]').first()
+  await image.evaluate(node => {
+    node.dataset.zoomSrc = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="540" height="960"><rect width="540" height="960" fill="teal"/></svg>')
+    node.dataset.zoomCap = '세로 이미지에 붙은 긴 설명도 이미지의 중요한 부분을 가리지 않고 모두 읽을 수 있어야 합니다. '.repeat(6)
+  })
+  await image.click()
+  await expect(viewer(page)).toBeVisible()
+  await expect.poll(() => viewer(page).locator('img').evaluate(node => node.naturalHeight)).toBe(960)
+
+  for (const viewport of [{ width: 390, height: 844 }, { width: 844, height: 390 }]) {
+    await page.setViewportSize(viewport)
+    const layout = await viewer(page).evaluate(dialog => {
+      const image = dialog.querySelector('img').getBoundingClientRect()
+      const captionElement = dialog.querySelector('[class*="zoomCaption"]')
+      const caption = captionElement.getBoundingClientRect()
+      const text = captionElement.firstElementChild.getBoundingClientRect()
+      return { imageBottom: image.bottom, captionTop: caption.top, captionBottom: caption.bottom, textTop: text.top, imageTop: image.top, overflow: document.documentElement.scrollWidth - innerWidth }
+    })
+    expect(layout.imageTop).toBeGreaterThanOrEqual(0)
+    expect(layout.imageBottom).toBeLessThanOrEqual(layout.captionTop)
+    expect(layout.textTop).toBeGreaterThanOrEqual(layout.captionTop)
+    expect(layout.captionBottom).toBeLessThanOrEqual(viewport.height)
+    expect(layout.overflow).toBeLessThanOrEqual(1)
+  }
+  await viewer(page).getByRole('button', { name: 'Close image viewer' }).click()
+  await expect(viewer(page)).toBeHidden()
+})

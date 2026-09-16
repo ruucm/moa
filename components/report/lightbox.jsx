@@ -67,7 +67,7 @@ function Lightbox({ items, index: openedAt, onClose }) {
         <DialogPrimitive.Content asChild aria-describedby={undefined} onCloseAutoFocus={restoreFocus}>
           <dialog ref={showModal} className={styles.zoomViewer} onClick={closeUnlessControl} onCancel={(event) => { event.preventDefault(); onClose() }}>
             <DialogPrimitive.Title className={styles.srOnly}>{item?.cap || 'Image viewer'}</DialogPrimitive.Title>
-            <img className={styles.zoomImage} src={item?.src} alt={item?.cap || ''} />
+            <div className={styles.zoomStage}><img className={styles.zoomImage} src={item?.src} alt={item?.cap || ''} /></div>
             <button type="button" className={styles.zoomClose} onClick={onClose} aria-label="Close image viewer"><Icon name="x" size={20} /></button>
             {many && <>
               <button type="button" className={cx(styles.zoomStep, styles.zoomPrevious)} onClick={() => step(-1)} aria-label="Previous image"><Icon name="arrowLeft" size={20} /></button>
