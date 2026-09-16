@@ -30,6 +30,13 @@ function Lightbox({ items, index: openedAt, onClose }) {
   const many = items.length > 1
   const step = useCallback((delta) => setIndex((current) => (current + delta + items.length) % items.length), [items.length])
 
+  // Portals escape ancestor clipping, but still lose to a report's larger z-index. A native
+  // modal lives in the browser's top layer; Radix keeps managing focus and scroll locking.
+  // Use a ref callback because the Portal mounts after this component's first effect.
+  const showModal = useCallback((node) => {
+    if (node && !node.open) node.showModal()
+  }, [])
+
   useEffect(() => {
     if (!many) return
     const onKey = (event) => {
@@ -55,19 +62,22 @@ function Lightbox({ items, index: openedAt, onClose }) {
   return (
     <DialogPrimitive.Root open onOpenChange={(next) => { if (!next) onClose() }}>
       <DialogPrimitive.Portal>
+        {/* Keep Radix's scroll lock. The native ::backdrop paints above every document layer. */}
         <DialogPrimitive.Overlay className={styles.zoomOverlay} />
-        <DialogPrimitive.Content className={styles.zoomViewer} aria-describedby={undefined} onCloseAutoFocus={restoreFocus} onClick={closeUnlessControl}>
-          <DialogPrimitive.Title className={styles.srOnly}>{item?.cap || 'Image viewer'}</DialogPrimitive.Title>
-          <img className={styles.zoomImage} src={item?.src} alt={item?.cap || ''} />
-          <button type="button" className={styles.zoomClose} onClick={onClose} aria-label="Close image viewer"><Icon name="x" size={20} /></button>
-          {many && <>
-            <button type="button" className={cx(styles.zoomStep, styles.zoomPrevious)} onClick={() => step(-1)} aria-label="Previous image"><Icon name="arrowLeft" size={20} /></button>
-            <button type="button" className={cx(styles.zoomStep, styles.zoomNext)} onClick={() => step(1)} aria-label="Next image"><Icon name="arrowRight" size={20} /></button>
-          </>}
-          {(item?.cap || many) && <div className={styles.zoomCaption}>
-            {item?.cap && <span>{item.cap}</span>}
-            {many && <span className={styles.zoomCount}>{index + 1} / {items.length}</span>}
-          </div>}
+        <DialogPrimitive.Content asChild aria-describedby={undefined} onCloseAutoFocus={restoreFocus}>
+          <dialog ref={showModal} className={styles.zoomViewer} onClick={closeUnlessControl} onCancel={(event) => { event.preventDefault(); onClose() }}>
+            <DialogPrimitive.Title className={styles.srOnly}>{item?.cap || 'Image viewer'}</DialogPrimitive.Title>
+            <img className={styles.zoomImage} src={item?.src} alt={item?.cap || ''} />
+            <button type="button" className={styles.zoomClose} onClick={onClose} aria-label="Close image viewer"><Icon name="x" size={20} /></button>
+            {many && <>
+              <button type="button" className={cx(styles.zoomStep, styles.zoomPrevious)} onClick={() => step(-1)} aria-label="Previous image"><Icon name="arrowLeft" size={20} /></button>
+              <button type="button" className={cx(styles.zoomStep, styles.zoomNext)} onClick={() => step(1)} aria-label="Next image"><Icon name="arrowRight" size={20} /></button>
+            </>}
+            {(item?.cap || many) && <div className={styles.zoomCaption}>
+              {item?.cap && <span>{item.cap}</span>}
+              {many && <span className={styles.zoomCount}>{index + 1} / {items.length}</span>}
+            </div>}
+          </dialog>
         </DialogPrimitive.Content>
       </DialogPrimitive.Portal>
     </DialogPrimitive.Root>
