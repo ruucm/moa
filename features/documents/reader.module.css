@@ -30,8 +30,13 @@
 .navigationSearch > svg { position: absolute; z-index: 1; left: var(--space-3); top: 50%; transform: translateY(-50%); color: var(--color-text-muted); }
 .navigationSearch input { min-height: 40px; padding: var(--space-2) var(--space-8); border-color: var(--color-border-subtle); background: var(--color-surface-panel); font-size: var(--font-size-sm); }
 .clearSearch { position: absolute; right: var(--space-1); top: 50%; transform: translateY(-50%); width: 32px; height: 32px; border: 0; background: none; border-radius: var(--radius-sm); color: var(--color-text-muted); cursor: pointer; }
-.documentNavigation { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: var(--space-6) var(--space-3); scrollbar-width: thin; scrollbar-color: var(--color-border-subtle) transparent; }
-.navigationLabel { padding: 0 var(--space-3) var(--space-3); font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); color: var(--color-text-muted); }
+.documentNavigation { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: var(--space-3) var(--space-3) var(--space-6); scrollbar-width: thin; scrollbar-color: var(--color-border-subtle) transparent; }
+.navigationHead { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-6) var(--space-6) 0; }
+.navigationLabel { flex-shrink: 0; white-space: nowrap; font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); color: var(--color-text-muted); }
+.sortControl { position: relative; display: flex; align-items: center; min-width: 0; margin-right: calc(-1 * var(--space-2)); }
+.sortControl select { appearance: none; max-width: 100%; min-height: 32px; padding: var(--space-1) var(--space-6) var(--space-1) var(--space-2); border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--color-text-secondary); font: inherit; font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); text-overflow: ellipsis; cursor: pointer; }
+.sortControl select:hover { background: var(--color-surface-subtle); color: var(--color-text-primary); }
+.sortControl > svg { position: absolute; right: var(--space-2); pointer-events: none; color: var(--color-text-muted); }
 .documentLink { display: flex; align-items: flex-start; gap: var(--space-3); min-height: 44px; padding: var(--space-3); margin: var(--space-1) 0; border-radius: var(--radius-sm); color: var(--color-text-secondary); text-decoration: none; font-size: var(--font-size-sm); line-height: 1.55; word-break: keep-all; overflow-wrap: anywhere; transition: color var(--duration-fast), background var(--duration-fast); }
 .documentLink > svg { margin-top: 3px; color: var(--color-text-muted); }
 .documentLink:hover { background: var(--color-surface-subtle); color: var(--color-text-primary); }
@@ -121,6 +126,7 @@
   .shell { grid-template-columns: 15rem minmax(0, 1fr); }
   .guestShell { grid-template-columns: minmax(0, 1fr); }
   .brandRow { padding: var(--space-5); }
+  .navigationHead { padding: var(--space-6) var(--space-5) 0; }
   .readerHeader { padding: 0 var(--space-6); }
   .documentLayout { padding: var(--space-10) var(--space-6) var(--space-6); }
   .breadcrumb > span:first-child { max-width: 8rem; }

@@ -141,7 +141,9 @@ stdout (NDJSON) — text, tool calls, results. No API key needed (uses the local
    seconds (SSE watch), no restart.
    - Top-of-file meta: `export const title / group / order / date` (`YYYY-MM-DD`) —
      **literals only** (the sidebar index parses them with a regex)
-   - Sidebar groups by `group`, sorts by `order` ascending
+   - Sidebar groups by `group`, sorts by `order` ascending. Readers can re-sort the groups by
+     name (numeric-aware) or by file mtime from the sidebar's sort menu; the choice is kept per
+     project in the browser
    - For registered external projects, write the `.mdx` into the original folder
      (the symlink target)
    - Project-local components live next to the docs (`../src/*.jsx`, relative import) —

@@ -5,7 +5,7 @@ import { useIndex, useWatch } from '../../lib/client-store.js'
 import { Brand, Button, Drawer, EmptyState, Icon, IconButton, InlineAlert, StatusBadge } from '../../components/ui/index.jsx'
 import DocRenderer from '../../components/doc-renderer.jsx'
 import ChatPanel from '../chat/ChatPanel.jsx'
-import DocumentNavigation from './DocumentNavigation.jsx'
+import DocumentNavigation, { sortOptions } from './DocumentNavigation.jsx'
 import DocumentOutline from './DocumentOutline.jsx'
 import { ShareButton } from './DocumentActions.jsx'
 import styles from './reader.module.css'
@@ -47,6 +47,7 @@ export default function ReaderLayout({ slug, docSlug }) {
   const [chatOpen, setChatOpen] = useState(false)
   const [navigationOpen, setNavigationOpen] = useState(false)
   const [collapsed, setCollapsed] = useState(new Set())
+  const [sort, setSort] = useState('order')
   const articleRef = useRef(null)
   const chatTriggerRef = useRef(null)
   const wideChat = useWideChat()
@@ -54,6 +55,9 @@ export default function ReaderLayout({ slug, docSlug }) {
   useEffect(() => {
     try { setCollapsed(new Set(JSON.parse(localStorage.getItem(`hub.collapsed.${slug}`) || '[]'))) }
     catch { setCollapsed(new Set()) }
+    let stored = null
+    try { stored = localStorage.getItem(`hub.sort.${slug}`) } catch {}
+    setSort(sortOptions.some((option) => option.value === stored) ? stored : 'order')
   }, [slug])
 
   const toggleGroup = (name) => setCollapsed((previous) => {
@@ -62,6 +66,11 @@ export default function ReaderLayout({ slug, docSlug }) {
     try { localStorage.setItem(`hub.collapsed.${slug}`, JSON.stringify([...next])) } catch {}
     return next
   })
+
+  const changeSort = (next) => {
+    setSort(next)
+    try { localStorage.setItem(`hub.sort.${slug}`, next) } catch {}
+  }
 
   useEffect(() => {
     // A refresh of the current document does not reset reading position.
@@ -92,7 +101,7 @@ export default function ReaderLayout({ slug, docSlug }) {
 
   const hidden = new Set(index.hidden || [])
   const projects = (index.projects || []).filter((entry) => entry.slug === slug || !hidden.has(entry.slug))
-  const navigationProps = { project, projects, doc, authed, owner, collapsed, onToggle: toggleGroup }
+  const navigationProps = { project, projects, doc, authed, owner, collapsed, onToggle: toggleGroup, sort, onSort: changeSort }
   const chatEnabled = !!(chat && cinfo && owner)
   const chatVisible = chatEnabled && chatOpen
   const closeChat = () => {

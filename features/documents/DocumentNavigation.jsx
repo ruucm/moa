@@ -5,6 +5,12 @@ import { Brand, Icon, Input, StatusBadge } from '../../components/ui/index.jsx'
 import { InviteButton } from './DocumentActions.jsx'
 import styles from './reader.module.css'
 
+export const sortOptions = [
+  { value: 'order', label: 'Default order' },
+  { value: 'name', label: 'By name' },
+  { value: 'recent', label: 'Last updated' },
+]
+
 const REVEAL_MARGIN = 24
 
 // Scrolls the document list the shortest distance that brings `element` into view, keeping a small
@@ -21,10 +27,41 @@ function revealInList(nav, element, smooth = false) {
   nav.scrollTo({ top: nav.scrollTop + delta, behavior: smooth && !reduceMotion ? 'smooth' : 'auto' })
 }
 
-export default function DocumentNavigation({ project, projects, doc, authed, owner, collapsed, onToggle, onNavigate, mobile = false }) {
+const leadingNumbers = (name) => {
+  const match = /^\s*(\d+(?:[.-]\d+)*)/.exec(name)
+  return match ? match[1].split(/[.-]/).map(Number) : null
+}
+
+// Numbered names sort by their numbers ("106" before "106-1", both before "110") and come first;
+// the rest follow alphabetically.
+function compareNames(a, b) {
+  const x = leadingNumbers(a)
+  const y = leadingNumbers(b)
+  if (x && y) {
+    for (let i = 0; i < Math.max(x.length, y.length); i++) {
+      const difference = (x[i] ?? -1) - (y[i] ?? -1)
+      if (difference) return difference
+    }
+  } else if (x || y) return x ? -1 : 1
+  return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })
+}
+
+const updatedAt = (group) => Math.max(...group.items.map((entry) => entry.mtime || Date.parse(entry.date || '') || 0))
+
+// Documents outside any group stay on top; only the groups themselves are reordered.
+function sortGroups(groups, sort) {
+  if (sort !== 'name' && sort !== 'recent') return groups
+  const loose = groups.filter((group) => group.name === '')
+  const named = groups.filter((group) => group.name !== '')
+  named.sort(sort === 'name' ? (a, b) => compareNames(a.name, b.name) : (a, b) => updatedAt(b) - updatedAt(a))
+  return [...loose, ...named]
+}
+
+export default function DocumentNavigation({ project, projects, doc, authed, owner, collapsed, onToggle, sort = 'order', onSort, onNavigate, mobile = false }) {
   const [query, setQuery] = useState('')
   const navRef = useRef(null)
   const openedGroup = useRef(null)
+  const appliedSort = useRef(sort)
   const id = useId()
   const groups = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase()
@@ -36,8 +73,9 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
       if (!group) result.push((group = { name, items: [] }))
       group.items.push(entry)
     }
-    return result
-  }, [project.docs, query])
+    return sortGroups(result, sort)
+  }, [project.docs, query, sort])
+  const sortable = useMemo(() => new Set(project.docs.map((entry) => entry.group).filter(Boolean)).size > 1, [project.docs])
 
   // Bring the current document into view when the reader lands on it or clears a search. This must
   // not re-run when a group is toggled: the reader opened that group to look at its pages, and
@@ -54,6 +92,13 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
     openedGroup.current = null
     if (element?.isConnected) revealInList(navRef.current, element, true)
   }, [collapsed])
+
+  // A new order is read from the top, so the list starts there (not on first render).
+  useEffect(() => {
+    if (appliedSort.current === sort) return
+    appliedSort.current = sort
+    navRef.current?.scrollTo({ top: 0 })
+  }, [sort])
 
   const toggleGroup = (event, name) => {
     if (!query && collapsed.has(name)) openedGroup.current = event.currentTarget.parentElement
@@ -102,8 +147,16 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
         <Input aria-label="Search documents" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search documents" />
         {query && <button className={styles.clearSearch} aria-label="Clear document search" onClick={() => setQuery('')}><Icon name="x" size={14} /></button>}
       </div>}
+      <div className={styles.navigationHead}>
+        <span className={styles.navigationLabel}>Documents</span>
+        {sortable && <div className={styles.sortControl}>
+          <select aria-label="Sort document groups" value={sort} onChange={(event) => onSort?.(event.target.value)}>
+            {sortOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
+          <Icon name="chevronDown" size={14} />
+        </div>}
+      </div>
       <nav className={styles.documentNavigation} ref={navRef} aria-label="Project documents">
-        <div className={styles.navigationLabel}>Documents</div>
         {groups.length === 0 && <p className={styles.navigationEmpty}>{query ? 'No matching documents.' : 'No documents yet.'}</p>}
         {groups.map((group, index) => group.name === '' ? group.items.map(documentLink) : (
           <div className={styles.documentGroup} key={group.name}>
