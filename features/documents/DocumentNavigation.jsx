@@ -5,9 +5,26 @@ import { Brand, Icon, Input, StatusBadge } from '../../components/ui/index.jsx'
 import { InviteButton } from './DocumentActions.jsx'
 import styles from './reader.module.css'
 
+const REVEAL_MARGIN = 24
+
+// Scrolls the document list the shortest distance that brings `element` into view, keeping a small
+// margin from the edges. A block taller than the list is aligned to the top so its start is visible.
+function revealInList(nav, element, smooth = false) {
+  if (!nav || !element || nav.scrollHeight <= nav.clientHeight) return
+  const list = nav.getBoundingClientRect()
+  const rect = element.getBoundingClientRect()
+  const above = rect.top - (list.top + REVEAL_MARGIN)
+  const below = rect.bottom - (list.bottom - REVEAL_MARGIN)
+  const delta = above < 0 ? above : below > 0 ? Math.min(below, above) : 0
+  if (!delta) return
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  nav.scrollTo({ top: nav.scrollTop + delta, behavior: smooth && !reduceMotion ? 'smooth' : 'auto' })
+}
+
 export default function DocumentNavigation({ project, projects, doc, authed, owner, collapsed, onToggle, onNavigate, mobile = false }) {
   const [query, setQuery] = useState('')
   const navRef = useRef(null)
+  const openedGroup = useRef(null)
   const id = useId()
   const groups = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase()
@@ -22,15 +39,26 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
     return result
   }, [project.docs, query])
 
+  // Bring the current document into view when the reader lands on it or clears a search. This must
+  // not re-run when a group is toggled: the reader opened that group to look at its pages, and
+  // pulling the list back to the current document (often the first entry) would throw that away.
   useEffect(() => {
     const nav = navRef.current
-    const active = nav?.querySelector('[aria-current="page"]')
-    if (!nav || !active || nav.scrollHeight <= nav.clientHeight) return
-    const itemRect = active.getBoundingClientRect()
-    const navRect = nav.getBoundingClientRect()
-    if (itemRect.top < navRect.top + 24) nav.scrollTop -= navRect.top + 24 - itemRect.top
-    else if (itemRect.bottom > navRect.bottom - 24) nav.scrollTop += itemRect.bottom - navRect.bottom + 24
-  }, [doc?.slug, collapsed, query])
+    revealInList(nav, nav?.querySelector('[aria-current="page"]'))
+  }, [doc?.slug, query])
+
+  // A group that just opened scrolls only as far as needed for its pages to show. Without this, a
+  // group near the end of the list unfolds below the fold and looks as if nothing happened.
+  useEffect(() => {
+    const element = openedGroup.current
+    openedGroup.current = null
+    if (element?.isConnected) revealInList(navRef.current, element, true)
+  }, [collapsed])
+
+  const toggleGroup = (event, name) => {
+    if (!query && collapsed.has(name)) openedGroup.current = event.currentTarget.parentElement
+    onToggle(name)
+  }
 
   const documentLink = (entry) => (
     <a key={entry.slug} href={`/p/${encodeURIComponent(project.slug)}/${encodeURIComponent(entry.slug)}`}
@@ -79,7 +107,7 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
         {groups.length === 0 && <p className={styles.navigationEmpty}>{query ? 'No matching documents.' : 'No documents yet.'}</p>}
         {groups.map((group, index) => group.name === '' ? group.items.map(documentLink) : (
           <div className={styles.documentGroup} key={group.name}>
-            <button className={styles.groupToggle} onClick={() => onToggle(group.name)}
+            <button className={styles.groupToggle} onClick={(event) => toggleGroup(event, group.name)}
               aria-expanded={query ? true : !collapsed.has(group.name)} aria-controls={`${id}-group-${index}`}>
               <span className={`${styles.groupCaret} ${query || !collapsed.has(group.name) ? styles.groupExpanded : ''}`}><Icon name="chevronRight" size={14} /></span>
               <span className={styles.groupName}>{group.name}</span>
