@@ -1,8 +1,8 @@
 import { test, expect } from '@playwright/test'
 import { login } from './review-session.mjs'
 
-// Reader view settings: the sidebar and the outline collapse on their own, and the view menu
-// switches small text and full width. Everything is kept in one localStorage entry for every document.
+// Reader view settings: the sidebar collapses from its own button, and the view menu switches small
+// text, full width and the table of contents. Everything is kept in one localStorage entry for every document.
 const heading = '더 명확하게, 더 편안하게'
 const openDocument = async (page, path = '/p/moa-design/overview') => {
   await page.goto(path)
@@ -16,8 +16,15 @@ const reading = page => page.locator('main#document-content')
 const width = locator => locator.evaluate(element => element.getBoundingClientRect().width)
 const storedView = page => page.evaluate(() => JSON.parse(localStorage.getItem('hub.reader.view')))
 const noOverflow = async page => expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(1)
+const openMenu = async page => {
+  const menu = page.getByRole('button', { name: 'View options', exact: true })
+  await menu.click()
+  await expect(menu).toHaveAttribute('aria-expanded', 'true')
+  return menu
+}
+const option = (page, name) => page.getByRole('switch', { name, exact: true })
 
-test('the sidebar and the outline collapse separately, hand focus to the control that restores them, and stay collapsed after a reload', async ({ page }) => {
+test('the sidebar collapses from its own button, hands focus to the control that restores it, and stays collapsed after a reload', async ({ page }) => {
   await login(page)
   await mockTools(page)
   await openDocument(page)
@@ -32,33 +39,59 @@ test('the sidebar and the outline collapse separately, hand focus to the control
   await expect(outline(page)).toBeVisible()
   await expect.poll(() => width(reading(page))).toBeGreaterThan(initial)
   expect(await storedView(page)).toMatchObject({ sidebar: false, outline: true })
-  const withoutSidebar = await width(reading(page))
-
-  await outline(page).getByRole('button', { name: 'Hide outline', exact: true }).click()
-  await expect(outline(page)).toBeHidden()
-  const showOutline = page.getByRole('button', { name: 'Show outline', exact: true })
-  await expect(showOutline).toBeFocused()
-  await expect.poll(() => width(reading(page))).toBeGreaterThan(withoutSidebar)
-  expect(await storedView(page)).toMatchObject({ sidebar: false, outline: false })
   await noOverflow(page)
 
   await page.reload()
   await expect(page.getByRole('heading', { name: heading, exact: true })).toBeVisible()
   await expect(sidebar(page)).toHaveCount(0)
-  await expect(outline(page)).toBeHidden()
   await expect(showSidebar).toBeVisible()
-  await expect(showOutline).toBeVisible()
 
-  await showOutline.click()
-  await expect(outline(page)).toBeVisible()
-  await expect(outline(page).getByRole('button', { name: 'Hide outline', exact: true })).toBeFocused()
-  await expect(showOutline).toHaveCount(0)
   await showSidebar.click()
   await expect(sidebar(page)).toBeVisible()
   await expect(sidebar(page).getByRole('button', { name: 'Hide sidebar', exact: true })).toBeFocused()
   await expect(showSidebar).toHaveCount(0)
-  expect(await storedView(page)).toMatchObject({ sidebar: true, outline: true })
+  expect(await storedView(page)).toMatchObject({ sidebar: true })
   expect(await width(reading(page))).toBe(initial)
+})
+
+test('the table of contents is a switch in the view menu, widens the document when off, and steps aside with the AI assistant', async ({ page }) => {
+  await login(page)
+  await mockTools(page)
+  await openDocument(page)
+  await expect(outline(page)).toBeVisible()
+  const initial = await width(reading(page))
+  const menu = await openMenu(page)
+  const contents = option(page, 'Table of contents')
+  await expect(contents).toHaveAttribute('aria-checked', 'true')
+  await contents.click()
+  await expect(contents).toHaveAttribute('aria-checked', 'false')
+  await expect(outline(page)).toBeHidden()
+  await expect.poll(() => width(reading(page))).toBeGreaterThan(initial)
+  expect(await storedView(page)).toMatchObject({ outline: false })
+  await noOverflow(page)
+  await page.keyboard.press('Escape')
+  await expect(menu).toBeFocused()
+
+  await page.reload()
+  await expect(page.getByRole('heading', { name: heading, exact: true })).toBeVisible()
+  await expect(outline(page)).toBeHidden()
+  await openMenu(page)
+  await option(page, 'Table of contents').click()
+  await expect(outline(page)).toBeVisible()
+  expect(await width(reading(page))).toBe(initial)
+  await page.keyboard.press('Escape')
+
+  // The assistant's column takes the outline's room, so the switch leaves the menu with it.
+  await page.getByRole('button', { name: 'Open AI assistant', exact: true }).click()
+  await expect(outline(page)).toBeHidden()
+  await openMenu(page)
+  await expect(option(page, 'Table of contents')).toBeHidden()
+  await expect(option(page, 'Small text')).toBeVisible()
+  await page.keyboard.press('Escape')
+  await page.getByRole('banner').getByRole('button', { name: 'Close AI assistant', exact: true }).click()
+  await expect(outline(page)).toBeVisible()
+  await openMenu(page)
+  await expect(option(page, 'Table of contents')).toBeVisible()
 })
 
 test('small text and full width are switches in the view menu, change the document column, and apply to every document', async ({ page }) => {
@@ -67,11 +100,9 @@ test('small text and full width are switches in the view menu, change the docume
   await openDocument(page)
   await expect(article(page)).toHaveCSS('font-size', '17px')
   await expect(article(page)).toHaveCSS('max-width', '704px')
-  const menu = page.getByRole('button', { name: 'View options', exact: true })
-  await menu.click()
-  await expect(menu).toHaveAttribute('aria-expanded', 'true')
-  const smallText = page.getByRole('switch', { name: 'Small text', exact: true })
-  const fullWidth = page.getByRole('switch', { name: 'Full width', exact: true })
+  const menu = await openMenu(page)
+  const smallText = option(page, 'Small text')
+  const fullWidth = option(page, 'Full width')
   await expect(smallText).toBeFocused()
   await expect(smallText).toHaveAttribute('aria-checked', 'false')
   await expect(fullWidth).toHaveAttribute('aria-checked', 'false')
@@ -95,9 +126,9 @@ test('small text and full width are switches in the view menu, change the docume
   await openDocument(page, '/p/brand-notes/overview')
   await expect(article(page)).toHaveCSS('font-size', '15px')
   await expect(article(page)).toHaveCSS('max-width', 'none')
-  await menu.click()
-  await page.getByRole('switch', { name: 'Small text', exact: true }).click()
-  await page.getByRole('switch', { name: 'Full width', exact: true }).click()
+  await openMenu(page)
+  await option(page, 'Small text').click()
+  await option(page, 'Full width').click()
   await expect(article(page)).toHaveCSS('font-size', '17px')
   await expect(article(page)).toHaveCSS('max-width', '704px')
   expect(await storedView(page)).toMatchObject({ smallText: false, fullWidth: false })
@@ -105,14 +136,13 @@ test('small text and full width are switches in the view menu, change the docume
   await expect(page.getByRole('switch')).toHaveCount(0)
 })
 
-test('390px keeps the navigation drawer whatever the sidebar setting, and the view menu still applies', async ({ page }) => {
+test('390px keeps the navigation drawer whatever the sidebar setting, and the view menu offers only what fits', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await login(page)
   await mockTools(page)
   await page.addInitScript(() => localStorage.setItem('hub.reader.view', JSON.stringify({ sidebar: false, outline: false, smallText: false, fullWidth: false })))
   await openDocument(page)
   await expect(page.getByRole('button', { name: 'Show sidebar', exact: true })).toBeHidden()
-  await expect(page.getByRole('button', { name: 'Show outline', exact: true })).toBeHidden()
   const menu = page.getByRole('button', { name: 'Open document navigation', exact: true })
   await menu.click()
   const drawer = page.getByRole('dialog', { name: 'Document navigation', exact: true })
@@ -123,25 +153,29 @@ test('390px keeps the navigation drawer whatever the sidebar setting, and the vi
   await expect(menu).toBeFocused()
 
   await expect(article(page)).toHaveCSS('font-size', '16px')
-  await page.getByRole('button', { name: 'View options', exact: true }).click()
-  await page.getByRole('switch', { name: 'Small text', exact: true }).click()
+  await openMenu(page)
+  await expect(option(page, 'Table of contents')).toBeHidden()
+  await expect(option(page, 'Full width')).toBeVisible()
+  await option(page, 'Small text').click()
   await expect(article(page)).toHaveCSS('font-size', '15px')
   await noOverflow(page)
 })
 
-test('a shared document offers the view menu but no sidebar or outline controls it cannot use', async ({ page }) => {
+test('a shared document offers the view menu but no sidebar controls', async ({ page }) => {
   await page.goto('/s/review-document-link-only')
   await expect(page.getByRole('heading', { name: heading, exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: /sidebar/ })).toHaveCount(0)
-  await outline(page).getByRole('button', { name: 'Hide outline', exact: true }).click()
+  await expect(outline(page)).toBeVisible()
+  await openMenu(page)
+  await option(page, 'Table of contents').click()
+  await option(page, 'Full width').click()
   await expect(outline(page)).toBeHidden()
-  await page.getByRole('button', { name: 'View options', exact: true }).click()
-  await page.getByRole('switch', { name: 'Full width', exact: true }).click()
   await expect(article(page)).toHaveCSS('max-width', 'none')
   await page.reload()
   await expect(page.getByRole('heading', { name: heading, exact: true })).toBeVisible()
   await expect(outline(page)).toBeHidden()
   await expect(article(page)).toHaveCSS('max-width', 'none')
-  await page.getByRole('button', { name: 'Show outline', exact: true }).click()
+  await openMenu(page)
+  await option(page, 'Table of contents').click()
   await expect(outline(page)).toBeVisible()
 })

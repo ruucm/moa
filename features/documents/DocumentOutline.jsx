@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useEffect, useRef, useState } from 'react'
-import { Icon, IconButton } from '../../components/ui/index.jsx'
+import { Icon } from '../../components/ui/index.jsx'
 import styles from './reader.module.css'
 
 // Preserve authored anchors and reserve page-wide IDs before assigning missing ones.
@@ -20,7 +20,7 @@ export function collectHeadings(article) {
   })
 }
 
-export default function DocumentOutline({ articleRef, documentKey, version, onHide, hideButtonRef }) {
+export default function DocumentOutline({ articleRef, documentKey, version }) {
   const [headings, setHeadings] = useState([])
   const [active, setActive] = useState('')
   const initialAnchor = useRef(null)
@@ -82,10 +82,7 @@ export default function DocumentOutline({ articleRef, documentKey, version, onHi
     setActive(heading.id)
   }
   return <aside className={styles.outline} aria-label="Document outline">
-    <div className={styles.outlineHeading}>
-      <span><Icon name="list" size={15} />On this page</span>
-      {onHide && <IconButton ref={hideButtonRef} icon="panelRightClose" label="Hide outline" size="sm" onClick={onHide} />}
-    </div>
+    <div className={styles.outlineHeading}><Icon name="list" size={15} />On this page</div>
     <nav>{headings.map((heading, index) => <a key={`${heading.id}-${index}`} href={`#${encodeURIComponent(heading.id)}`}
       className={`${styles.outlineLink} ${heading.level === 3 ? styles.outlineNested : ''} ${active === heading.id ? styles.outlineActive : ''}`}
       aria-current={active === heading.id ? 'location' : undefined} onClick={(event) => followHeading(event, heading)}>

@@ -4,9 +4,11 @@ import React, { useEffect, useId, useRef, useState } from 'react'
 import { Icon, IconButton } from '../../components/ui/index.jsx'
 import styles from './reader.module.css'
 
+// The table of contents row only shows where the outline column exists (see .outlineOption).
 const options = [
   { key: 'smallText', icon: 'textSize', label: 'Small text', hint: 'Fit more on the screen' },
   { key: 'fullWidth', icon: 'width', label: 'Full width', hint: 'Use the whole page width' },
+  { key: 'outline', icon: 'list', label: 'Table of contents', hint: 'Headings on this page', className: styles.outlineOption },
 ]
 
 // The page display menu: a switch per setting, kept for every document (see use-reader-view.js).
@@ -40,8 +42,9 @@ export default function ViewMenu({ view, onToggle }) {
     <IconButton ref={triggerRef} icon="sliders" label="View options" size="sm" aria-haspopup="true" aria-expanded={open}
       aria-controls={open ? id : undefined} onClick={() => setOpen((current) => !current)} />
     {open && <div id={id} ref={panelRef} className={styles.viewMenuPanel} role="group" aria-label="View options">
-      {options.map((option) => <button key={option.key} type="button" role="switch" aria-checked={view[option.key]} className={styles.viewOption}
-        aria-labelledby={`${id}-${option.key}`} aria-describedby={`${id}-${option.key}-hint`} onClick={() => onToggle(option.key)}>
+      {options.map((option) => <button key={option.key} type="button" role="switch" aria-checked={view[option.key]}
+        className={`${styles.viewOption} ${option.className || ''}`} aria-labelledby={`${id}-${option.key}`}
+        aria-describedby={`${id}-${option.key}-hint`} onClick={() => onToggle(option.key)}>
         <Icon name={option.icon} size={16} />
         <span className={styles.viewOptionText}>
           <span id={`${id}-${option.key}`}>{option.label}</span>

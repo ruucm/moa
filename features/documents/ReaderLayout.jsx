@@ -55,8 +55,6 @@ export default function ReaderLayout({ slug, docSlug }) {
   const chatTriggerRef = useRef(null)
   const hideSidebarRef = useRef(null)
   const showSidebarRef = useRef(null)
-  const hideOutlineRef = useRef(null)
-  const showOutlineRef = useRef(null)
   const wideChat = useWideChat()
 
   useEffect(() => {
@@ -79,9 +77,9 @@ export default function ReaderLayout({ slug, docSlug }) {
     try { localStorage.setItem(`hub.sort.${slug}`, next) } catch {}
   }
 
-  // Collapsing a panel removes the button that did it, so focus moves to the control that brings it back.
-  const togglePanel = (key, counterpart) => {
-    toggleView(key)
+  // Collapsing the sidebar removes the button that did it, so focus moves to the control that brings it back.
+  const toggleSidebar = (counterpart) => {
+    toggleView('sidebar')
     requestAnimationFrame(() => counterpart.current?.focus({ preventScroll: true }))
   }
 
@@ -126,7 +124,7 @@ export default function ReaderLayout({ slug, docSlug }) {
   return <div className={`${styles.shell} ${authed ? '' : styles.guestShell} ${authed && !view.sidebar ? styles.sidebarHidden : ''} ${chatVisible && wideChat ? styles.withChat : ''}`}>
     <a href="#document-content" className={styles.skipLink}>Skip to content</a>
     {sidebarShown && <aside className={styles.sidebar}>
-      <DocumentNavigation {...navigationProps} onCollapse={() => togglePanel('sidebar', showSidebarRef)} collapseButtonRef={hideSidebarRef} />
+      <DocumentNavigation {...navigationProps} onCollapse={() => toggleSidebar(showSidebarRef)} collapseButtonRef={hideSidebarRef} />
     </aside>}
     <div className={styles.readingArea}>
       <header className={styles.readerHeader}>
@@ -134,7 +132,7 @@ export default function ReaderLayout({ slug, docSlug }) {
           {authed ? <>
             <div className={styles.mobileMenu}><IconButton icon="menu" label="Open document navigation" onClick={() => setNavigationOpen(true)} /></div>
             {!view.sidebar && <div className={styles.sidebarExpand}>
-              <IconButton ref={showSidebarRef} icon="panelLeft" label="Show sidebar" onClick={() => togglePanel('sidebar', hideSidebarRef)} />
+              <IconButton ref={showSidebarRef} icon="panelLeft" label="Show sidebar" onClick={() => toggleSidebar(hideSidebarRef)} />
               <a href="/" className={styles.headerBrand} aria-label="MOA project home"><Brand compact /></a>
             </div>}
           </> : <Brand compact />}
@@ -145,9 +143,6 @@ export default function ReaderLayout({ slug, docSlug }) {
         </div>
         <div className={styles.headerActions}>
           {!authed && <StatusBadge tone="neutral">Shared document</StatusBadge>}
-          {doc && !view.outline && <div className={styles.outlineShow}>
-            <IconButton ref={showOutlineRef} icon="panelRight" label="Show outline" size="sm" onClick={() => togglePanel('outline', hideOutlineRef)} />
-          </div>}
           {owner && doc && <ShareButton slug={slug} doc={doc.slug} />}
           {cinfo && <Button ref={chatTriggerRef} variant={chatVisible ? 'secondary' : 'ghost'} size="sm" aria-expanded={chatVisible} aria-label={chatVisible ? 'Close AI assistant' : 'Open AI assistant'}
             onClick={() => { setChat((current) => current || { seed: null }); setChatOpen((current) => !current) }}>
@@ -179,8 +174,7 @@ export default function ReaderLayout({ slug, docSlug }) {
             : <EmptyState icon="file" title="Ready for your first document"
               description="Add a report to this project to read it here." />}
         </main>
-        {doc && <DocumentOutline articleRef={articleRef} documentKey={`${slug}/${doc.slug}`} version={docVersion}
-          onHide={() => togglePanel('outline', showOutlineRef)} hideButtonRef={hideOutlineRef} />}
+        {doc && <DocumentOutline articleRef={articleRef} documentKey={`${slug}/${doc.slug}`} version={docVersion} />}
       </div>
     </div>
     {authed && <Drawer open={navigationOpen} onClose={() => setNavigationOpen(false)} title="Document navigation" side="left" className={styles.navigationDrawer}>
