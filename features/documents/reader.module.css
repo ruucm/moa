@@ -5,10 +5,11 @@
   color: var(--color-text-primary);
   background: var(--color-surface-panel);
 }
-.guestShell { grid-template-columns: minmax(0, 1fr); }
+.guestShell, .sidebarHidden { grid-template-columns: minmax(0, 1fr); }
 .sidebar { position: sticky; top: 0; height: 100dvh; min-width: 0; border-right: 1px solid var(--color-border-subtle); background: var(--color-surface-page); }
 .navigation { display: flex; flex-direction: column; min-height: 0; height: 100%; }
 .brandRow { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); min-height: 80px; padding: var(--space-5) var(--space-6); }
+.brandRow > button { margin-right: calc(-1 * var(--space-3)); color: var(--color-text-muted); }
 .brandLink { display: inline-flex; text-decoration: none; }
 .projectBlock { padding: var(--space-5) var(--space-5) var(--space-6); margin: 0 var(--space-2); border-bottom: 1px solid var(--color-border-subtle); }
 .projectEyebrow { color: var(--color-text-muted); font-size: var(--font-size-xs); margin-bottom: var(--space-2); }
@@ -63,6 +64,12 @@
 .breadcrumbCurrent { color: var(--color-text-secondary); }
 .headerActions { display: flex; align-items: center; gap: var(--space-2); flex-shrink: 0; }
 .mobileMenu { display: none; }
+/* Shown while the sidebar is collapsed: the way back, plus the brand the sidebar used to carry. */
+.sidebarExpand { display: flex; align-items: center; gap: var(--space-3); margin-left: calc(-1 * var(--space-3)); }
+.sidebarExpand > button { color: var(--color-text-muted); }
+.headerBrand { display: inline-flex; text-decoration: none; }
+/* Shown while the outline is hidden, only where the outline would otherwise be. */
+.outlineShow { display: none; }
 .documentLayout { display: grid; grid-template-columns: minmax(0, 1fr); max-width: calc(var(--width-wide) + 16rem); margin: 0 auto; padding: var(--space-12) var(--space-10) var(--space-8); }
 /* How far a wide <Figure> may bleed past the reading column on each side. The layout owns this
    budget because only it knows the room left beside the column; the chat panel takes it away. */
@@ -78,7 +85,9 @@
 .documentFooter > span > span > svg { width: 24px; height: 24px; }
 .documentFooter a { color: var(--color-text-muted); text-decoration: none; }
 .outline { display: none; position: sticky; top: var(--space-10); align-self: start; min-width: 0; max-height: calc(100dvh - var(--space-20)); padding-top: var(--space-1); }
-.outlineHeading { display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-4); color: var(--color-text-secondary); font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); }
+.outlineHeading { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); margin-bottom: var(--space-4); color: var(--color-text-secondary); font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); }
+.outlineHeading > span { display: flex; align-items: center; gap: var(--space-2); }
+.outlineHeading > button { margin: calc(-1 * var(--space-2)) calc(-1 * var(--space-2)) calc(-1 * var(--space-2)) 0; color: var(--color-text-muted); }
 .outline nav { max-height: calc(100dvh - 14rem); overflow-y: auto; border-left: 1px solid var(--color-border-subtle); scrollbar-width: thin; }
 .outlineLink { display: block; padding: var(--space-2) 0 var(--space-2) var(--space-4); border-left: 2px solid transparent; margin-left: -1px; color: var(--color-text-muted); font-size: var(--font-size-xs); line-height: 1.6; text-decoration: none; word-break: keep-all; overflow-wrap: anywhere; }
 .outlineLink:hover { color: var(--color-text-primary); }
@@ -86,9 +95,31 @@
 .outlineActive { color: var(--color-accent-text); border-left-color: var(--color-accent-solid); font-weight: var(--font-weight-medium); }
 .backToTop { display: inline-flex; gap: var(--space-2); align-items: center; margin-top: var(--space-6); color: var(--color-text-muted); font-size: var(--font-size-xs); text-decoration: none; }
 .withChat { grid-template-columns: 17rem minmax(0, 1fr) 25rem; }
+.withChat.sidebarHidden { grid-template-columns: minmax(0, 1fr) 25rem; }
 .chatColumn { position: sticky; top: 0; min-width: 0; height: 100dvh; border-left: 1px solid var(--color-border-subtle); background: var(--color-surface-panel); }
 .outlineHidden .outline { display: none; }
 .outlineHidden { grid-template-columns: minmax(0, 1fr) !important; }
+.withChat .outlineShow { display: none; }
+/* View options (the menu at the top right). Both settings are kept for every document. */
+.viewMenu { position: relative; }
+.viewMenuPanel { position: absolute; z-index: var(--z-menu); top: calc(100% + var(--space-2)); right: 0; width: min(18rem, calc(100vw - 2rem)); padding: var(--space-2); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-md); background: var(--color-surface-panel); box-shadow: var(--shadow-md); }
+.viewOption { display: flex; align-items: center; gap: var(--space-3); width: 100%; min-height: 44px; padding: var(--space-2) var(--space-3); border: 0; border-radius: var(--radius-sm); background: none; color: var(--color-text-primary); font: inherit; font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); text-align: left; cursor: pointer; }
+.viewOption:hover { background: var(--color-surface-subtle); }
+.viewOption > svg { color: var(--color-text-muted); }
+.viewOptionText { display: flex; flex: 1; flex-direction: column; gap: 2px; min-width: 0; }
+.viewOptionText small { color: var(--color-text-muted); font-size: var(--font-size-xs); font-weight: normal; line-height: 1.4; }
+.switch { position: relative; flex-shrink: 0; width: 34px; height: 20px; border-radius: var(--radius-full); background: var(--color-border-control); transition: background var(--duration-fast); }
+.switch > span { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--color-surface-panel); box-shadow: var(--shadow-sm); transition: transform var(--duration-fast); }
+.viewOption[aria-checked="true"] .switch { background: var(--color-accent-solid); }
+.viewOption[aria-checked="true"] .switch > span { transform: translateX(14px); }
+/* Small text scales every size token the document and its components read, so tables, stats and
+   captions shrink with the prose. The h1 has a literal size in prose.css and is scaled here. */
+.smallText { --font-size-xs: .75rem; --font-size-sm: .8125rem; --font-size-md: .875rem; --font-size-base: .9375rem; --font-size-body: .9375rem; --font-size-lg: 1.0625rem; --font-size-xl: 1.3125rem; --font-size-2xl: 1.75rem; --font-size-3xl: 2.125rem; }
+.smallText :where(h1) { font-size: 1.875rem; }
+/* Full width lifts the reading-column cap (--width-reader) and the layout's own cap. Nothing is
+   left beside the column, so wide figures have no room to bleed into. */
+.shell .documentLayout.fullWidth { max-width: none; --width-reader: none; }
+.fullWidth .documentMain { --figure-bleed: 0rem; }
 .linkAction { position: relative; }
 .actionError { position: absolute; z-index: var(--z-menu); top: calc(100% + var(--space-2)); right: 0; min-width: min(16rem, 80vw); padding: var(--space-3); background: var(--color-danger-surface); border: 1px solid var(--color-danger-border); border-radius: var(--radius-sm); color: var(--color-danger-text); font-size: var(--font-size-xs); box-shadow: var(--shadow-md); }
 .refreshError { margin: var(--space-5) var(--space-10) 0; }
@@ -114,17 +145,19 @@
 @media (min-width: 1380px) {
   .documentLayout { grid-template-columns: minmax(0, 1fr) 12rem; gap: var(--space-12); padding: var(--space-12) var(--space-12) var(--space-8); }
   .outline { display: block; }
-  .guestShell .documentLayout { max-width: calc(var(--width-wide) + 6rem); }
+  .outlineShow { display: block; }
+  .guestShell .documentLayout, .sidebarHidden .documentLayout { max-width: calc(var(--width-wide) + 6rem); }
 }
 @media (min-width: 1600px) {
   .documentMain { --figure-bleed: 4rem; }
 }
 @media (min-width: 1700px) {
   .withChat { grid-template-columns: 17rem minmax(0, 1fr) 28rem; }
+  .withChat.sidebarHidden { grid-template-columns: minmax(0, 1fr) 28rem; }
 }
 @media (max-width: 1023px) {
   .shell { grid-template-columns: 15rem minmax(0, 1fr); }
-  .guestShell { grid-template-columns: minmax(0, 1fr); }
+  .guestShell, .sidebarHidden { grid-template-columns: minmax(0, 1fr); }
   .brandRow { padding: var(--space-5); }
   .navigationHead { padding: var(--space-6) var(--space-5) 0; }
   .readerHeader { padding: 0 var(--space-6); }
@@ -134,6 +167,7 @@
 @media (max-width: 767px) {
   .shell { display: block; }
   .sidebar { display: none; }
+  .sidebarExpand { display: none; }
   .readerHeader { height: 68px; gap: var(--space-2); padding: 0 var(--space-4); }
   .headerContext { gap: var(--space-2); }
   .mobileMenu { display: block; margin-left: calc(-1 * var(--space-2)); }
@@ -149,7 +183,9 @@
   .projectMenu > summary { min-height: 44px; }
   .navigationSearch input { min-height: 44px; }
   .chatDrawer { width: 100vw; border-radius: 0; }
+  .smallText :where(h1) { font-size: 1.5rem; }
+  .smallText :where(h2) { font-size: 1.1875rem; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .documentLink, .groupCaret { transition: none; }
+  .documentLink, .groupCaret, .switch, .switch > span { transition: none; }
 }

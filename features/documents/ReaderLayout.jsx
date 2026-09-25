@@ -7,7 +7,9 @@ import DocRenderer from '../../components/doc-renderer.jsx'
 import ChatPanel from '../chat/ChatPanel.jsx'
 import DocumentNavigation, { sortOptions } from './DocumentNavigation.jsx'
 import DocumentOutline from './DocumentOutline.jsx'
+import ViewMenu from './ViewMenu.jsx'
 import { ShareButton } from './DocumentActions.jsx'
+import { useReaderView } from './use-reader-view.js'
 import styles from './reader.module.css'
 
 function useClaudeInfo(enabled) {
@@ -48,8 +50,13 @@ export default function ReaderLayout({ slug, docSlug }) {
   const [navigationOpen, setNavigationOpen] = useState(false)
   const [collapsed, setCollapsed] = useState(new Set())
   const [sort, setSort] = useState('order')
+  const [view, toggleView] = useReaderView()
   const articleRef = useRef(null)
   const chatTriggerRef = useRef(null)
+  const hideSidebarRef = useRef(null)
+  const showSidebarRef = useRef(null)
+  const hideOutlineRef = useRef(null)
+  const showOutlineRef = useRef(null)
   const wideChat = useWideChat()
 
   useEffect(() => {
@@ -70,6 +77,12 @@ export default function ReaderLayout({ slug, docSlug }) {
   const changeSort = (next) => {
     setSort(next)
     try { localStorage.setItem(`hub.sort.${slug}`, next) } catch {}
+  }
+
+  // Collapsing a panel removes the button that did it, so focus moves to the control that brings it back.
+  const togglePanel = (key, counterpart) => {
+    toggleView(key)
+    requestAnimationFrame(() => counterpart.current?.focus({ preventScroll: true }))
   }
 
   useEffect(() => {
@@ -108,14 +121,23 @@ export default function ReaderLayout({ slug, docSlug }) {
     setChatOpen(false)
     if (wideChat) requestAnimationFrame(() => chatTriggerRef.current?.focus({ preventScroll: true }))
   }
+  const sidebarShown = authed && view.sidebar
 
-  return <div className={`${styles.shell} ${authed ? '' : styles.guestShell} ${chatVisible && wideChat ? styles.withChat : ''}`}>
+  return <div className={`${styles.shell} ${authed ? '' : styles.guestShell} ${authed && !view.sidebar ? styles.sidebarHidden : ''} ${chatVisible && wideChat ? styles.withChat : ''}`}>
     <a href="#document-content" className={styles.skipLink}>Skip to content</a>
-    {authed && <aside className={styles.sidebar}><DocumentNavigation {...navigationProps} /></aside>}
+    {sidebarShown && <aside className={styles.sidebar}>
+      <DocumentNavigation {...navigationProps} onCollapse={() => togglePanel('sidebar', showSidebarRef)} collapseButtonRef={hideSidebarRef} />
+    </aside>}
     <div className={styles.readingArea}>
       <header className={styles.readerHeader}>
         <div className={styles.headerContext}>
-          {authed ? <div className={styles.mobileMenu}><IconButton icon="menu" label="Open document navigation" onClick={() => setNavigationOpen(true)} /></div> : <Brand compact />}
+          {authed ? <>
+            <div className={styles.mobileMenu}><IconButton icon="menu" label="Open document navigation" onClick={() => setNavigationOpen(true)} /></div>
+            {!view.sidebar && <div className={styles.sidebarExpand}>
+              <IconButton ref={showSidebarRef} icon="panelLeft" label="Show sidebar" onClick={() => togglePanel('sidebar', hideSidebarRef)} />
+              <a href="/" className={styles.headerBrand} aria-label="MOA project home"><Brand compact /></a>
+            </div>}
+          </> : <Brand compact />}
           <nav className={styles.breadcrumb} aria-label="Breadcrumb">
             <span>{project.title}</span>
             {doc && <><Icon name="chevronRight" size={14} /><span className={styles.breadcrumbCurrent}>{doc.title}</span></>}
@@ -123,17 +145,21 @@ export default function ReaderLayout({ slug, docSlug }) {
         </div>
         <div className={styles.headerActions}>
           {!authed && <StatusBadge tone="neutral">Shared document</StatusBadge>}
+          {doc && !view.outline && <div className={styles.outlineShow}>
+            <IconButton ref={showOutlineRef} icon="panelRight" label="Show outline" size="sm" onClick={() => togglePanel('outline', hideOutlineRef)} />
+          </div>}
           {owner && doc && <ShareButton slug={slug} doc={doc.slug} />}
           {cinfo && <Button ref={chatTriggerRef} variant={chatVisible ? 'secondary' : 'ghost'} size="sm" aria-expanded={chatVisible} aria-label={chatVisible ? 'Close AI assistant' : 'Open AI assistant'}
             onClick={() => { setChat((current) => current || { seed: null }); setChatOpen((current) => !current) }}>
             <Icon name="sparkles" size={16} /><span className={styles.aiLabel}>AI assistant</span>
           </Button>}
+          <ViewMenu view={view} onToggle={toggleView} />
         </div>
       </header>
       {error && <div className={styles.refreshError}><InlineAlert tone="warning" title="Could not refresh this document">
         You can continue reading the current version. <button onClick={reload}>Check again</button>
       </InlineAlert></div>}
-      <div className={`${styles.documentLayout} ${chatVisible ? styles.outlineHidden : ''}`}>
+      <div className={`${styles.documentLayout} ${chatVisible || !view.outline ? styles.outlineHidden : ''} ${view.fullWidth ? styles.fullWidth : ''}`}>
         <main className={styles.documentMain} id="document-content" tabIndex={-1}>
           {doc ? <>
             <div className={styles.documentMeta}>
@@ -141,7 +167,7 @@ export default function ReaderLayout({ slug, docSlug }) {
               {doc.date && <time dateTime={doc.date}>{doc.date.replaceAll('-', '. ')}</time>}
               {project.demo && <StatusBadge tone="neutral">Sample document</StatusBadge>}
             </div>
-            <article ref={articleRef} className={`page moa-prose ${styles.article}`}>
+            <article ref={articleRef} className={`page moa-prose ${styles.article} ${view.smallText ? styles.smallText : ''}`}>
               <DocRenderer slug={slug} doc={doc.slug} version={docVersion} />
             </article>
             <footer className={styles.documentFooter}>
@@ -153,7 +179,8 @@ export default function ReaderLayout({ slug, docSlug }) {
             : <EmptyState icon="file" title="Ready for your first document"
               description="Add a report to this project to read it here." />}
         </main>
-        {doc && <DocumentOutline articleRef={articleRef} documentKey={`${slug}/${doc.slug}`} version={docVersion} />}
+        {doc && <DocumentOutline articleRef={articleRef} documentKey={`${slug}/${doc.slug}`} version={docVersion}
+          onHide={() => togglePanel('outline', showOutlineRef)} hideButtonRef={hideOutlineRef} />}
       </div>
     </div>
     {authed && <Drawer open={navigationOpen} onClose={() => setNavigationOpen(false)} title="Document navigation" side="left" className={styles.navigationDrawer}>

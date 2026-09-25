@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useEffect, useId, useMemo, useRef, useState } from 'react'
-import { Brand, Icon, Input, StatusBadge } from '../../components/ui/index.jsx'
+import { Brand, Icon, IconButton, Input, StatusBadge } from '../../components/ui/index.jsx'
 import { InviteButton } from './DocumentActions.jsx'
 import styles from './reader.module.css'
 
@@ -57,7 +57,7 @@ function sortGroups(groups, sort) {
   return [...loose, ...named]
 }
 
-export default function DocumentNavigation({ project, projects, doc, authed, owner, collapsed, onToggle, sort = 'order', onSort, onNavigate, mobile = false }) {
+export default function DocumentNavigation({ project, projects, doc, authed, owner, collapsed, onToggle, sort = 'order', onSort, onNavigate, onCollapse, collapseButtonRef, mobile = false }) {
   const [query, setQuery] = useState('')
   const navRef = useRef(null)
   const openedGroup = useRef(null)
@@ -118,6 +118,7 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
     <div className={`${styles.navigation} ${mobile ? styles.mobileNavigation : ''}`}>
       {!mobile && <div className={styles.brandRow}>
         {authed ? <a href="/" className={styles.brandLink} aria-label="MOA project home"><Brand /></a> : <Brand />}
+        {onCollapse && <IconButton ref={collapseButtonRef} icon="panelLeftClose" label="Hide sidebar" onClick={onCollapse} />}
       </div>}
       <div className={styles.projectBlock}>
         <div className={styles.projectEyebrow}>{authed ? 'Current project' : 'Shared document'}</div>
