@@ -47,7 +47,7 @@ const userClaims = async (req) => {
 // Defense in depth alongside guardAdmin in the route handlers.
 const ADMIN_PATHS = [
   '/api/chat', '/api/trigger', '/api/claude', '/api/browse', '/api/add', '/api/remove',
-  '/api/order', '/api/hide', '/api/share', '/api/session', '/api/sessions', '/api/users',
+  '/api/order', '/api/hide', '/api/projects/update', '/api/share', '/api/session', '/api/sessions', '/api/users',
 ]
 const isAdminPath = (p) => ADMIN_PATHS.some((a) => p === a || p.startsWith(a + '/'))
 

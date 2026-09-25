@@ -29,7 +29,7 @@ npm run add-user -- <email> <name> <pw> admin   # add an account directly (users
 
 - **Roles**: `member` sees only invited projects (the account's `projects` array), with live
   updates. `admin` sees everything. Admin-only APIs
-  (`/api/chat`·`trigger`·`add`·`remove`·`browse`·`order`·`hide`·`share*`·`session*`·`users*`·`claude`)
+  (`/api/chat`·`trigger`·`add`·`remove`·`browse`·`order`·`hide`·`projects/update`·`share*`·`session*`·`users*`·`claude`)
   are double-guarded: middleware path blocking + route guards (`guardAdmin` in `lib/api.mjs`).
   `/api/projects`·`/api/doc`·`/api/watch` filter by the member's `projects`.
   (Note: `public/` media is reachable by any logged-in member who guesses the path.)
@@ -99,6 +99,19 @@ curl -s -b /tmp/moa.jar -X POST http://localhost:5001/api/order \
 
 Sort rule (`lib/content.mjs`): `order` ascending → missing = 99 → title `localeCompare`.
 A `title` in `registry.json` overrides `_meta.json`.
+
+### Title and description
+
+Edit what the hub shows for a project from its card's `···` menu ("Edit details"), or via API:
+
+```bash
+curl -s -b /tmp/moa.jar -X POST http://localhost:5001/api/projects/update \
+  -H 'Content-Type: application/json' -d '{"slug":"my-project","title":"New title","description":"One line"}'
+```
+
+A registered project keeps the change in `registry.json` (the connected folder is untouched);
+a local project writes it to its `_meta.json`. The title is required; an empty description hides
+the line.
 
 ## Claude chat (headless runs from the web)
 

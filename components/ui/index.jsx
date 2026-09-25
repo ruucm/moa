@@ -2,7 +2,7 @@
 
 import React, { forwardRef, useId, useRef } from 'react'
 import * as DialogPrimitive from '@radix-ui/react-dialog'
-import { ALargeSmall, Archive, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ArrowUpRight, BookOpen, Check, ChevronDown, ChevronRight, ChevronUp, CircleAlert, CircleCheck, Clock, Copy, Ellipsis, ExternalLink, Eye, FileText, Folder, GripVertical, History, House, ImageIcon, Info, Layers, LinkIcon, List, Lock, LogOut, Menu, MoveHorizontal, PanelLeft, PanelLeftClose, Play, Plus, RefreshCw, Search, Send, Settings, ShieldCheck, SlidersHorizontal, Sparkles, Square, SquareTerminal, Trash2, Users, X } from 'lucide-react'
+import { ALargeSmall, Archive, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ArrowUpRight, BookOpen, Check, ChevronDown, ChevronRight, ChevronUp, CircleAlert, CircleCheck, Clock, Copy, Ellipsis, ExternalLink, Eye, FileText, Folder, GripVertical, History, House, ImageIcon, Info, Layers, LinkIcon, List, Lock, LogOut, Menu, MoveHorizontal, PanelLeft, PanelLeftClose, Pencil, Play, Plus, RefreshCw, Search, Send, Settings, ShieldCheck, SlidersHorizontal, Sparkles, Square, SquareTerminal, Trash2, Users, X } from 'lucide-react'
 import styles from './ui.module.css'
 
 const cx = (...items) => items.filter(Boolean).join(' ')
@@ -17,7 +17,7 @@ const icons = {
   settings: Settings, logOut: LogOut, sparkles: Sparkles, terminal: SquareTerminal, send: Send, stop: Square, copy: Copy,
   alertCircle: CircleAlert, info: Info, lock: Lock, shield: ShieldCheck, layers: Layers, image: ImageIcon, play: Play,
   archive: Archive, eye: Eye, trash: Trash2, openExternal: ExternalLink, grip: GripVertical, list: List,
-  panelLeft: PanelLeft, panelLeftClose: PanelLeftClose, sliders: SlidersHorizontal, textSize: ALargeSmall, width: MoveHorizontal,
+  panelLeft: PanelLeft, panelLeftClose: PanelLeftClose, sliders: SlidersHorizontal, textSize: ALargeSmall, width: MoveHorizontal, edit: Pencil,
 }
 const aliases = { close: 'x', logout: 'logOut', 'file-text': 'file', 'arrow-right':'arrowRight', 'arrow-left':'arrowLeft', 'arrow-up':'arrowUp', 'arrow-down':'arrowDown', 'chevron-down':'chevronDown', 'chevron-right':'chevronRight', 'chevron-up':'chevronUp', 'alert-circle':'alertCircle', 'check-circle':'checkCircle', 'external-link':'openExternal', 'log-out':'logOut', loader:'refresh' }
 export const iconNames = Object.keys(icons)
@@ -66,10 +66,15 @@ export function InlineAlert({ tone = 'info', title, children, className }) {
   return <div className={cx(styles.alert, styles[`tone_${tone}`], className)} role={tone === 'danger' ? 'alert' : 'status'}><Icon name={tone === 'success' ? 'checkCircle' : 'info'} size={19}/><div>{title && <strong>{title}</strong>}{children && <div>{children}</div>}</div></div>
 }
 
-function OverlayPanel({ open, onClose, title, description, children, footer, size = 'md', className, drawer = false, side = 'left' }) {
+function OverlayPanel({ open, onClose, title, description, children, footer, size = 'md', className, drawer = false, side = 'left', initialFocus }) {
   const returnFocus = useRef(null)
   const descriptionId = useId()
-  const rememberFocus = () => { returnFocus.current = document.activeElement }
+  // Focus lands on `initialFocus` when given (a form's first field), otherwise on the first control.
+  const rememberFocus = (event) => {
+    returnFocus.current = document.activeElement
+    const target = initialFocus?.current
+    if (target instanceof HTMLElement) { event.preventDefault(); target.focus({ preventScroll: true }) }
+  }
   return <DialogPrimitive.Root open={open} onOpenChange={next => { if (!next) onClose?.() }}><DialogPrimitive.Portal><DialogPrimitive.Overlay className={styles.overlay}/><DialogPrimitive.Content className={cx(styles.dialog, size === 'lg' && styles.dialogLarge, drawer && styles.drawer, drawer && side === 'right' && styles.drawerRight, className)} onOpenAutoFocus={rememberFocus} onCloseAutoFocus={event => { event.preventDefault(); const target = returnFocus.current; if (target instanceof HTMLElement && target.isConnected) target.focus() }} aria-describedby={description ? descriptionId : undefined}><header className={styles.dialogHead}><div><DialogPrimitive.Title className={styles.dialogTitle}>{title}</DialogPrimitive.Title>{description && <DialogPrimitive.Description id={descriptionId} className={styles.dialogDescription}>{description}</DialogPrimitive.Description>}</div><DialogPrimitive.Close asChild><IconButton icon="x" label="Close"/></DialogPrimitive.Close></header><div className={styles.dialogBody}>{children}</div>{footer && <footer className={styles.dialogFooter}>{footer}</footer>}</DialogPrimitive.Content></DialogPrimitive.Portal></DialogPrimitive.Root>
 }
 export function Dialog(props) { return <OverlayPanel {...props}/> }

@@ -81,6 +81,8 @@
 .menuActions button:disabled { opacity: .4; cursor: default; }
 .menuActions .dangerAction { color: var(--color-danger-text); }
 .menuHint { font-size: var(--font-size-xs); color: var(--color-text-muted); margin: var(--space-2); }
+.editForm { display: flex; flex-direction: column; gap: var(--space-5); }
+.editHelp { margin: 0; color: var(--color-text-muted); font-size: var(--font-size-xs); line-height: 1.7; }
 .empty { padding: var(--space-10) 0; }
 .demoSection { margin-top: var(--space-10); }
 .demoToggle { display: flex; gap: var(--space-2); align-items: center; margin: 0; padding: var(--space-2) 0; background: none; border: 0; color: var(--color-text-muted); font-size: var(--font-size-sm); font-weight: 500; }

@@ -1,6 +1,7 @@
 'use client'
 import React, { useEffect, useRef, useState } from 'react'
 import { Button, Dialog, Icon, IconButton } from '../../components/ui/index.jsx'
+import EditProjectDialog from './edit-project-dialog.jsx'
 import styles from './hub.module.css'
 
 export const projectStatus = {
@@ -13,6 +14,7 @@ export const projectStatus = {
 export default function ProjectCard({ project: p, tools, owner, position, total, onMove, reload, onFeedback, reorderEnabled, orderSaving, dragProps = {}, dragging, dropTarget }) {
   const [open, setOpen] = useState(false)
   const [confirmAction, setConfirmAction] = useState(false)
+  const [editing, setEditing] = useState(false)
   const [busy, setBusy] = useState(false)
   const menuRef = useRef(null)
   const triggerRef = useRef(null)
@@ -28,6 +30,8 @@ export default function ProjectCard({ project: p, tools, owner, position, total,
     document.addEventListener('keydown', esc)
     return () => { document.removeEventListener('pointerdown', away); document.removeEventListener('keydown', esc) }
   }, [open])
+  // Menu actions hand focus back to the trigger before opening a dialog, so closing it lands there.
+  const focusTrigger = () => triggerRef.current?.querySelector('button')?.focus()
   const remove = async () => {
     setBusy(true)
     try {
@@ -42,7 +46,12 @@ export default function ProjectCard({ project: p, tools, owner, position, total,
     } catch (e) { onFeedback({ tone: 'danger', text: e.message }) }
     finally { setBusy(false) }
   }
-  const move = (direction) => { setOpen(false); triggerRef.current?.querySelector('button')?.focus(); onMove(p.slug, position + direction) }
+  const move = (direction) => { setOpen(false); focusTrigger(); onMove(p.slug, position + direction) }
+  const saved = (details) => {
+    setEditing(false)
+    onFeedback({ tone: 'success', text: `“${details.title}” was updated.` })
+    reload()
+  }
   return (
     <div className={[styles.cardWrap, open ? styles.menuOpen : '', dragging ? styles.dragging : '', dropTarget ? styles.dropTarget : ''].join(' ')} role="listitem" {...dragProps}>
       <a className={styles.projectCard} href={`/p/${encodeURIComponent(p.slug)}`} draggable={false}>
@@ -69,12 +78,14 @@ export default function ProjectCard({ project: p, tools, owner, position, total,
         }}>
           <div className={styles.menuDetails}><span>{status.label}{p.updated ? ` · Updated ${p.updated}` : ''}</span><code>{path}</code>{tools && <span>{tools.skills?.length || 0} skills · {tools.agents?.length || 0} agents</span>}</div>
           {owner && <div className={styles.menuActions}>
+            <button onClick={() => { focusTrigger(); setOpen(false); setEditing(true) }}><Icon name="edit" size={16} />Edit details</button>
             <button disabled={!reorderEnabled || position === 0} onClick={() => move(-1)}><Icon name="arrowUp" size={16} />Move earlier</button>
             <button disabled={!reorderEnabled || position === total - 1} onClick={() => move(1)}><Icon name="arrowDown" size={16} />Move later</button>
             {!reorderEnabled && <p className={styles.menuHint}>{orderSaving ? 'Saving project order…' : 'Clear search and filters to change the order.'}</p>}
-            <button className={styles.dangerAction} onClick={() => { triggerRef.current?.querySelector('button')?.focus(); setOpen(false); setConfirmAction(true) }}>{p.registered ? 'Unregister' : 'Hide project'}</button>
+            <button className={styles.dangerAction} onClick={() => { focusTrigger(); setOpen(false); setConfirmAction(true) }}>{p.registered ? 'Unregister' : 'Hide project'}</button>
           </div>}
         </div>}
+        {owner && editing && <EditProjectDialog project={p} onClose={() => setEditing(false)} onSaved={saved} />}
         {owner && <Dialog open={confirmAction} onClose={() => !busy && setConfirmAction(false)} title={p.registered ? 'Unregister this project?' : 'Hide this project?'} description={`“${p.title}”${p.registered ? ' will leave this hub. The original folder and documents stay unchanged.' : ' will be hidden from the hub. You can show it again in Settings.'}`} footer={<><Button variant="secondary" disabled={busy} onClick={() => setConfirmAction(false)}>Cancel</Button><Button variant="danger" loading={busy} onClick={remove}>{p.registered ? 'Unregister' : 'Hide'}</Button></>} />}
       </>
     </div>
