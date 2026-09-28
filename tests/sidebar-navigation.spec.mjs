@@ -7,7 +7,7 @@ import { reviewRoot } from '../scripts/review-fixtures.mjs'
 // The document list only scrolls once it overflows, so the project index is padded with fictional
 // episode groups. They exist in the index only, never on disk, so only the real overview is rendered.
 const sequential = Array.from({ length: 20 }, (_, index) => String(101 + index))
-const pages = ['P · 기획원문', 'P0 · 대본', 'P1 · 스틸', 'P2 · 파일럿', 'P2.5 · 선조립', 'P3 · 전량', 'P3.5 · 재롤 판단', 'P4 · 조립', 'P5 · 완성본']
+const pages = ['P · 대본', 'P0 · 대본', 'P1 · 스틸', 'P2 · 파일럿', 'P2.5 · 선조립', 'P3 · 전량', 'P3.5 · 재롤 판단', 'P4 · 조립', 'P5 · 완성본']
 const groupName = number => `${number}: 검수용 에피소드 (가상 · 사이드바 스크롤 확인)`
 const groupButton = number => new RegExp(`^${number}: `)
 const lastEpisode = sequential.at(-1)
