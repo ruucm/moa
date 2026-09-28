@@ -29,7 +29,7 @@ npm run add-user -- <email> <name> <pw> admin   # add an account directly (users
 
 - **Roles**: `member` sees only invited projects (the account's `projects` array), with live
   updates. `admin` sees everything. Admin-only APIs
-  (`/api/chat`·`trigger`·`add`·`remove`·`browse`·`order`·`hide`·`projects/update`·`share*`·`session*`·`users*`·`claude`)
+  (`/api/chat`·`trigger`·`add`·`remove`·`browse`·`order*`·`hide`·`projects/update`·`share*`·`session*`·`users*`·`claude`)
   are double-guarded: middleware path blocking + route guards (`guardAdmin` in `lib/api.mjs`).
   `/api/projects`·`/api/doc`·`/api/watch` filter by the member's `projects`.
   (Note: `public/` media is reachable by any logged-in member who guesses the path.)
@@ -97,6 +97,19 @@ curl -s -b /tmp/moa.jar -X POST http://localhost:5001/api/order \
   -H 'Content-Type: application/json' -d '{"slugs":["a","b","c"]}'   # order 10/20/30
 ```
 
+### Sidebar group order (drag to sort)
+
+An admin drags a group in a project's sidebar onto another group's place (or focuses a group and
+presses Alt+↑/↓); saved instantly under `registry.groupOrder[slug]` and shown to every reader:
+saved groups first, as saved, then groups not in it by `order`. The sidebar's sort menu orders the
+pages inside each group and never moves the groups. Only names of the project's current groups are
+kept; `[]` resets to the `order` meta.
+
+```bash
+curl -s -b /tmp/moa.jar -X POST http://localhost:5001/api/order/groups \
+  -H 'Content-Type: application/json' -d '{"slug":"my-project","groups":["Overview","References"]}'
+```
+
 Sort rule (`lib/content.mjs`): `order` ascending → missing = 99 → title `localeCompare`.
 A `title` in `registry.json` overrides `_meta.json`.
 
@@ -154,8 +167,9 @@ stdout (NDJSON) — text, tool calls, results. No API key needed (uses the local
    seconds (SSE watch), no restart.
    - Top-of-file meta: `export const title / group / order / date` (`YYYY-MM-DD`) —
      **literals only** (the sidebar index parses them with a regex)
-   - Sidebar groups by `group`, sorts by `order` ascending. Readers can re-sort the groups by
-     name (numeric-aware) or by file mtime from the sidebar's sort menu; the choice is kept per
+   - Sidebar groups by `group`, sorts by `order` ascending — after any groups an admin dragged
+     into place ("Sidebar group order" above). Readers can sort the pages inside each group by
+     title (numeric-aware) or by file mtime from the sidebar's sort menu; the choice is kept per
      project in the browser
    - For registered external projects, write the `.mdx` into the original folder
      (the symlink target)

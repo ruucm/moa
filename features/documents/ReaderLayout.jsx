@@ -112,7 +112,7 @@ export default function ReaderLayout({ slug, docSlug }) {
 
   const hidden = new Set(index.hidden || [])
   const projects = (index.projects || []).filter((entry) => entry.slug === slug || !hidden.has(entry.slug))
-  const navigationProps = { project, projects, doc, authed, owner, collapsed, onToggle: toggleGroup, sort, onSort: changeSort }
+  const navigationProps = { project, projects, doc, authed, owner, collapsed, onToggle: toggleGroup, sort, onSort: changeSort, onReorder: reload }
   const chatEnabled = !!(chat && cinfo && owner)
   const chatVisible = chatEnabled && chatOpen
   const closeChat = () => {
