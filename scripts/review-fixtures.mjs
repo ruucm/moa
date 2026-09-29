@@ -98,7 +98,7 @@ export function createReviewFixtures() {
   fs.mkdirSync(guide, { recursive: true })
   fs.writeFileSync(path.join(guide, '_meta.json'), JSON.stringify({ title: 'MOA Design System', description: '화면을 만드는 공통 기준과 실제 컴포넌트.', status: 'active', order: 70 }))
   const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-  for (const filename of ['components.mdx', 'design-system.mdx']) fs.copyFileSync(path.join(projectRoot, 'projects/guide', filename), path.join(guide, filename))
+  for (const filename of ['components.mdx', 'design-system.mdx', 'slides.mdx']) fs.copyFileSync(path.join(projectRoot, 'projects/guide', filename), path.join(guide, filename))
   fs.writeFileSync(path.join(guide, 'runtime-error.mdx'), `export const title = '렌더 오류 검수'\nexport const order = 98\n\n# 런타임 오류\n\n{(() => { throw new Error('검수용 렌더 오류') })()}\n`)
   fs.writeFileSync(path.join(guide, 'compile-error.mdx'), 'export const title = "컴파일 오류 검수"\nexport const order = 99\n\n<Unclosed>')
   const empty = path.join(reviewRoot, 'projects', 'empty-project')

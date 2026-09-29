@@ -128,6 +128,26 @@ Grid images are click-to-zoom as well.
 ]} />
 ```
 
+## Deck — Slides
+
+`<Deck>` with `<Slide>`s turns a document into a slide deck you can present full screen, with speaker
+notes, exercise timers and checklists. See [Slides](/p/guide/slides) for layouts and keys.
+
+```mdx
+<Deck title="Week 2" footer="Course · Week 2">
+
+<Slide kicker="Part 1" title="Prompt blocks" sub="Seven blocks, one sentence">
+
+- Markdown works here
+
+<Notes>
+What to say on this slide.
+</Notes>
+</Slide>
+
+</Deck>
+```
+
 ## Images in Markdown
 
 `![caption](/my-project/still-01.png)` is click-to-zoom too — the alt text becomes the viewer

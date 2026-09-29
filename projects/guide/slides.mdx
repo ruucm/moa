@@ -1,0 +1,152 @@
+export const title = 'Slides'
+export const group = 'Guide'
+export const order = 3
+export const date = '2026-09-29'
+
+export const art = (label, sky = '#efefeb', hill = '#d8dad2', w = 960, h = 540) => 'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 960 540" preserveAspectRatio="xMidYMid slice"><rect width="960" height="540" fill="${sky}"/><circle cx="742" cy="132" r="54" fill="#f7f7f5" opacity=".75"/><path d="M0 402 L188 286 L332 402 L520 250 L724 402 L960 320 V540 H0Z" fill="${hill}"/><text x="480" y="500" text-anchor="middle" font-family="system-ui, sans-serif" font-size="30" fill="#20211f">${label}</text></svg>`)
+
+# Slides
+
+A deck is an ordinary MDX document. Every slide below is a card you can read and edit in place:
+save the file and the open page updates within seconds — even while you are presenting.
+**Present** shows the slides one at a time, full screen.
+
+<Deck title="Slides guide" footer="MOA · Slides">
+
+<Slide layout="cover" kicker="MOA guide" title={'Slides in MDX'} sub="Write a deck, read it as a document, present it full screen" image={art('Cover picture', '#3c4038', '#2f322c')}>
+
+2026-09-29 · every value on these slides is an example
+
+<Notes>
+Covers take a full-bleed picture. The text sits on a dark scrim so it stays readable on any picture.
+</Notes>
+</Slide>
+
+<Slide kicker="Basics" title="One slide, one idea" sub="Markdown works inside a slide" time="0:00–1:00">
+
+- Bullets, **bold**, *emphasis* and `code` read as usual
+- Numbered lists become steps
+- The canvas is fixed, so a slide looks the same here and on a projector
+
+<Notes>
+Speaker notes go in `<Notes>`. They show under the card in the document and at the bottom of the screen when you press **N** while presenting.
+</Notes>
+</Slide>
+
+<Slide kicker="Steps" title="Numbered lists become steps">
+
+1. Open the workflow
+2. Run it once without changing anything
+3. Change one field and run again
+
+</Slide>
+
+<Slide kicker="SlideGrid" title="Pictures with labels" sub="Tones mark the pick and the failures" tag="Example" tone="success">
+
+<SlideGrid cols={4} items={[
+  { src: art('Original'), label: 'Original', sub: 'default settings' },
+  { src: art('Take 2', '#e8eee9'), label: 'Take 2', sub: 'adopted', tone: 'accent' },
+  { src: art('Take 3', '#f3ece6'), label: 'Take 3', sub: 'face changed', tone: 'danger' },
+  { src: art('Take 4', '#eceef4'), label: 'Take 4' },
+]} note={'Pictures keep their proportions. Add fit="cover" to fill each cell instead.'} />
+
+</Slide>
+
+<Slide layout="split" kicker="Exercise 1" title="Open and run" sub="basic-workflow.json" timer={2} image={art('Expected result', '#e8eee9', '#c8d4ca', 720, 960)} cap="Expected result — close is a pass" tag="Easy" tone="success">
+
+Change nothing and press **Run**. The same settings give the same picture.
+
+</Slide>
+
+<Slide title="Before we move on" tag="Checklist" tone="info">
+
+<SlideChecklist items={['✅ Saved the workflow', 'Saved the picture you chose', 'Wrote down what changed']} />
+
+</Slide>
+
+<Slide layout="section" kicker="Part 2" mark="2" title={'Characters\nand worlds'} sub="Sections open each part of a talk" />
+
+<Slide layout="statement" title="Change one thing at a time," sub="and write down what changed" />
+
+</Deck>
+
+## Writing a deck
+
+```mdx
+<Deck title="Week 2" footer="Course · Week 2">
+
+<Slide kicker="Part 1" title="Prompt blocks" sub="Seven blocks, one sentence" time="5:00–8:00">
+
+- Markdown works here
+- **Bold**, `code` and numbered lists too
+
+<Notes>
+What to say on this slide.
+</Notes>
+</Slide>
+
+<Slide layout="split" title="Open and run" timer={4} image="/my-project/expected.jpg" cap="Expected result">
+
+Press **Run** without changing anything.
+
+</Slide>
+
+</Deck>
+```
+
+Leave a blank line after an opening tag and before a closing tag so the Markdown inside is read as Markdown.
+Anything in a deck that is not a `<Slide>` — a `## heading` between parts, a paragraph — shows in the
+document only, and headings there appear in the page outline.
+
+### `Deck`
+
+| Prop | Meaning |
+| --- | --- |
+| `title` | Shown in the deck's toolbar and read out by screen readers |
+| `footer` | Small text in the bottom-left corner of every slide except covers |
+| `aspect` | `16:9` (default) · `16:10` · `4:3` |
+| `id` | Prefix for slide links, `slide` by default (`#slide-12`). Give each deck its own when a page has two |
+
+### `Slide`
+
+| Prop | Meaning |
+| --- | --- |
+| `title` · `sub` · `kicker` | Title, subtitle and the small label above the title. Break a line with `title={'One\nTwo'}` |
+| `layout` | `default` · `split` (text left, picture right) · `cover` · `section` · `statement` |
+| `image` | A picture: below the text (default), on the right (`split`), or full-bleed behind the text (`cover`, `section`, `statement`). Add `video` for a video file |
+| `fit` · `position` · `cap` · `alt` | `fit="cover"` crops to fill (`position="top"` keeps the top), `cap` labels the picture, `alt` describes it |
+| `split` | Width of text and picture in a split slide, `5:7` by default |
+| `tag` · `tone` | A status tag in the top-right corner. `tone`: `accent` · `success` · `warning` · `danger` · `info` · `muted` |
+| `timer` | Minutes for an exercise countdown. Click it, or press **T** while presenting |
+| `time` | When the slide happens in the talk (`12:00–15:00`). Shown in the document and with the notes |
+| `mark` | A large faint number or word behind a section slide |
+| `id` | A stable link name (`id="intro"` → `#intro`) that survives slides being added before it |
+
+### Inside a slide
+
+- `<SlideGrid items={[{ src, label, sub, tone }]} note="…" />` — pictures with labels in the space left on
+  the slide. Without `cols` the grid tries every column count and keeps the one that makes the pictures
+  largest; `cols={4}` fixes it. Pictures are never cropped unless `fit="cover"`. `ratio="3/4"` states their
+  shape so the slide is laid out before they load. `src` can be a list for a pair side by side, and
+  `label` and `sub` on the grid itself add a row heading, so two grids stack as two labelled rows.
+- `<SlideChecklist items={['…']} />` — items the room ticks off. Items starting with `✅` begin ticked.
+- The shared report components (`Callout`, `Stats`, `DataTable` …) and Markdown tables work as well.
+
+## Presenting
+
+**Present** in the deck's toolbar starts from the slide you are looking at; the ▶ under a slide starts
+from that slide. The page stays in presentation mode while the file is saved and reloaded.
+
+| Key | Action |
+| --- | --- |
+| → · Space · PgDn · click | Next slide (click the left quarter to go back) |
+| ← · PgUp | Previous slide |
+| Home · End | First · last slide |
+| 12 Enter | Go to slide 12 |
+| F | Full screen |
+| N | Speaker notes |
+| O | All slides |
+| T | Start or pause the timer (Shift+T resets) |
+| C | Tick the next checklist item |
+| B · . | Blank the screen |
+| Esc | Close a panel, then end the presentation |

@@ -186,10 +186,18 @@ stdout (NDJSON) — text, tool calls, results. No API key needed (uses the local
 ## Shared components (no import needed — injected via MDXProvider)
 
 `Stats` `DataTable` `Checks` `Issues` `Timeline` `Progress` `Callout` `Badge` `Lessons`
-`Rules` `Figure` `MediaGrid` `Updated` `FooterNote`
+`Rules` `Figure` `MediaGrid` `Updated` `FooterNote` — and for slide decks `Deck` `Slide` `Notes`
+`SlideGrid` `SlideChecklist`
 
 Implementation: `components/shared.jsx` · usage with live examples:
 `projects/guide/components.mdx` (in the browser: `/p/guide/components`)
+
+- **Slide decks** — `<Deck>` holding `<Slide>`s makes the document a presentation: every slide is a
+  card in the page, **Present** shows them full screen (keys: → · N notes · O overview · T timer · F ·
+  Esc). A slide is a fixed 960 px canvas scaled as one piece, so it looks the same as a card and on a
+  projector; Markdown and the components above work inside it. Saving the file updates an open
+  presentation in place — same slide, running timers kept. Layouts, props and keys:
+  `projects/guide/slides.mdx` (`/p/guide/slides`) · implementation `components/report/deck.jsx`.
 
 - **Images are click-to-zoom** — `Figure`, `MediaGrid` and Markdown `![]()` images all open the
   same viewer (`components/report/lightbox.jsx`); every image on the page is one gallery, so

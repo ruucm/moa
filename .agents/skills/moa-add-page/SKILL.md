@@ -1,6 +1,6 @@
 ---
 name: moa-add-page
-description: Write a new MDX report page into a project on the local MOA hub (default port 5001) — front-matter exports, sidebar group/order, the built-in shared components (Stats, DataTable, Checks, Issues, Timeline, Progress, Callout, Badge, Lessons, Rules, MediaGrid), media placement, and mobile-safe layout. Use when asked to add a page/report/doc to moa or the hub (모아에 문서·리포트·페이지 추가), to write up results as an mdx report, or to update an existing hub document.
+description: Write a new MDX report page into a project on the local MOA hub (default port 5001) — front-matter exports, sidebar group/order, the built-in shared components (Stats, DataTable, Checks, Issues, Timeline, Progress, Callout, Badge, Lessons, Rules, MediaGrid) and slide decks (Deck, Slide), media placement, and mobile-safe layout. Use when asked to add a page/report/doc to moa or the hub (모아에 문서·리포트·페이지 추가), to make slides or a presentation in moa (슬라이드·발표 자료), to write up results as an mdx report, or to update an existing hub document.
 ---
 
 # Add a document (.mdx) to the MOA hub
@@ -67,6 +67,41 @@ Body…
 ```
 
 Full catalog with live-rendered examples: `projects/guide/components.mdx` (in the browser at `/p/guide/components`).
+
+### Slide decks (`Deck` · `Slide` · `Notes` · `SlideGrid` · `SlideChecklist`)
+
+When asked for slides, a deck or a presentation, write them as a document — no HTML deck, no build step:
+
+```mdx
+<Deck title="Week 2" footer="Course · Week 2">
+
+<Slide layout="cover" kicker="Course · 2026" title={'Line one\nLine two'} sub="Subtitle" image="/<slug>/cover.jpg" />
+
+<Slide kicker="Part 1" title="Title" sub="Subtitle" tag="Easy" tone="success" time="5:00–8:00">
+
+- Markdown body
+
+<SlideGrid items={[{ src: '/<slug>/a.jpg', label: 'A', sub: 'note', tone: 'success' }, { src: '/<slug>/b.jpg', label: 'B' }]} />
+
+<Notes>
+What to say.
+</Notes>
+</Slide>
+
+<Slide layout="split" title="Exercise" timer={4} image="/<slug>/expected.jpg" cap="Expected result">
+
+Steps for the exercise.
+
+</Slide>
+
+</Deck>
+```
+
+- One `<Slide>` block is one slide; leave blank lines inside it so the Markdown is read as Markdown
+- Layouts: `default` · `split` · `cover` · `section` · `statement`. Tones: `accent` · `success` · `warning` · `danger` · `info` · `muted`
+- The canvas is a fixed 960 × 540 page: keep a slide to a title, a short body and one grid or picture.
+  Leave out `cols` on `SlideGrid` and it picks the column count that makes the pictures largest
+- Full reference and keys: `projects/guide/slides.mdx` (`/p/guide/slides`)
 Markdown tables (GFM) work too, and tables are automatically wrapped in a horizontal scroll box.
 
 ## Project-local components

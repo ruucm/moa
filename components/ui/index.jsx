@@ -2,7 +2,7 @@
 
 import React, { forwardRef, useId, useRef } from 'react'
 import * as DialogPrimitive from '@radix-ui/react-dialog'
-import { ALargeSmall, Archive, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ArrowUpRight, BookOpen, Check, ChevronDown, ChevronRight, ChevronUp, CircleAlert, CircleCheck, Clock, Copy, Ellipsis, ExternalLink, Eye, FileText, Folder, GripVertical, History, House, ImageIcon, Info, Layers, LinkIcon, List, Lock, LogOut, Menu, MoveHorizontal, PanelLeft, PanelLeftClose, Pencil, Play, Plus, RefreshCw, Search, Send, Settings, ShieldCheck, SlidersHorizontal, Sparkles, Square, SquareTerminal, Trash2, Users, X } from 'lucide-react'
+import { ALargeSmall, Archive, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ArrowUpRight, BookOpen, Check, ChevronDown, ChevronRight, ChevronUp, CircleAlert, CircleCheck, Clock, Copy, Ellipsis, ExternalLink, Eye, FileText, Folder, GripVertical, History, House, ImageIcon, Info, Keyboard, Layers, LayoutGrid, LinkIcon, List, Lock, LogOut, Maximize, Menu, Minimize, MoveHorizontal, NotebookText, PanelLeft, PanelLeftClose, Pause, Pencil, Play, Plus, RefreshCw, RotateCcw, Search, Send, Settings, ShieldCheck, SlidersHorizontal, Sparkles, Square, SquareTerminal, Timer, Trash2, Users, X } from 'lucide-react'
 import styles from './ui.module.css'
 
 const cx = (...items) => items.filter(Boolean).join(' ')
@@ -18,6 +18,7 @@ const icons = {
   alertCircle: CircleAlert, info: Info, lock: Lock, shield: ShieldCheck, layers: Layers, image: ImageIcon, play: Play,
   archive: Archive, eye: Eye, trash: Trash2, openExternal: ExternalLink, grip: GripVertical, list: List,
   panelLeft: PanelLeft, panelLeftClose: PanelLeftClose, sliders: SlidersHorizontal, textSize: ALargeSmall, width: MoveHorizontal, edit: Pencil,
+  notes: NotebookText, grid: LayoutGrid, maximize: Maximize, minimize: Minimize, keyboard: Keyboard, timer: Timer, pause: Pause, reset: RotateCcw,
 }
 const aliases = { close: 'x', logout: 'logOut', 'file-text': 'file', 'arrow-right':'arrowRight', 'arrow-left':'arrowLeft', 'arrow-up':'arrowUp', 'arrow-down':'arrowDown', 'chevron-down':'chevronDown', 'chevron-right':'chevronRight', 'chevron-up':'chevronUp', 'alert-circle':'alertCircle', 'check-circle':'checkCircle', 'external-link':'openExternal', 'log-out':'logOut', loader:'refresh' }
 export const iconNames = Object.keys(icons)
