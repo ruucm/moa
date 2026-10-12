@@ -129,6 +129,7 @@ test('런타임 오류 뒤 SSE로 새 번들이 오면 오류 경계도 복구�
   // Drive the existing useWatch callback without changing any fixture files.
   await page.addInitScript(() => {
     window.readerWatchers = []
+    delete window.SharedWorker // without it a tab opens its own stream — the one this fake EventSource stands in for
     window.EventSource = class {
       constructor(url) { this.url = url; this.closed = false; window.readerWatchers.push(this) }
       close() { this.closed = true }

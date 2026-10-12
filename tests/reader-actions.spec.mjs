@@ -177,6 +177,7 @@ for (const width of [390, 1440]) {
     } }))
     await page.addInitScript(() => {
       window.readerActionWatchers = []
+      delete window.SharedWorker // without it a tab opens its own stream — the one this fake EventSource stands in for
       window.EventSource = class {
         constructor(url) { this.url = url; this.closed = false; window.readerActionWatchers.push(this) }
         close() { this.closed = true }
