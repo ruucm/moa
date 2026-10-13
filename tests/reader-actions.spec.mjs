@@ -133,7 +133,7 @@ test('document groups preserve their collapsed state per project across reloads 
   await mockTools(page)
   await openDocument(page)
   const navigation = page.getByRole('navigation', { name: 'Project documents', exact: true })
-  const group = navigation.getByRole('button', { name: /작업 기록/ })
+  const group = navigation.getByRole('button', { name: /^작업 기록/ })
   const note = navigation.getByRole('link', { name: '관찰과 배움', exact: true })
   await expect(note).toBeVisible()
   await group.click()

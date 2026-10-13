@@ -110,6 +110,21 @@ curl -s -b /tmp/moa.jar -X POST http://localhost:5001/api/order/groups \
   -H 'Content-Type: application/json' -d '{"slug":"my-project","groups":["Overview","References"]}'
 ```
 
+### Pinned sidebar groups
+
+An admin pins a group with the pin at the end of its heading in a project's sidebar (it shows with
+the pointer or keyboard focus on the group, and always on a touch screen). Pinned groups lead the
+sidebar for every reader, the latest pin first, above the documents outside any group; saved
+instantly under `registry.groupPins[slug]`. Pinned groups are dragged (or moved with Alt+↑/↓) among
+themselves, the other groups among themselves. A pinned group keeps its own place in the group
+order, so unpinning puts it back there. Only names of the project's current groups are kept; `[]`
+unpins them all.
+
+```bash
+curl -s -b /tmp/moa.jar -X POST http://localhost:5001/api/order/pins \
+  -H 'Content-Type: application/json' -d '{"slug":"my-project","groups":["This week","Overview"]}'
+```
+
 Sort rule (`lib/content.mjs`): `order` ascending → missing = 99 → title `localeCompare`.
 A `title` in `registry.json` overrides `_meta.json`.
 
@@ -167,10 +182,10 @@ stdout (NDJSON) — text, tool calls, results. No API key needed (uses the local
    seconds (SSE watch), no restart.
    - Top-of-file meta: `export const title / group / order / date` (`YYYY-MM-DD`) —
      **literals only** (the sidebar index parses them with a regex)
-   - Sidebar groups by `group`, sorts by `order` ascending — after any groups an admin dragged
-     into place ("Sidebar group order" above). Readers can sort the pages inside each group by
-     title (numeric-aware) or by file mtime from the sidebar's sort menu; the choice is kept per
-     project in the browser
+   - Sidebar groups by `group`, sorts by `order` ascending — after any groups an admin pinned
+     to the top or dragged into place ("Sidebar group order" and "Pinned sidebar groups" above).
+     Readers can sort the pages inside each group by title (numeric-aware) or by file mtime from
+     the sidebar's sort menu; the choice is kept per project in the browser
    - For registered external projects, write the `.mdx` into the original folder
      (the symlink target)
    - Project-local components live next to the docs (`../src/*.jsx`, relative import) —

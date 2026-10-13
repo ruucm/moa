@@ -60,6 +60,18 @@ function arrangeGroups(groups, saved = []) {
   return [...loose, ...named]
 }
 
+// Pinned groups (`pins`, the latest pin first) leave that order and lead the list, above the documents
+// outside any group. `named` keeps every group in its own place, where an unpinned group goes back to.
+function splitPinned(groups, pins = []) {
+  const named = groups.filter((group) => group.name !== '')
+  return {
+    named,
+    pinned: [...new Set(pins)].map((name) => named.find((group) => group.name === name)).filter(Boolean),
+    loose: groups.find((group) => group.name === '')?.items || [],
+    rest: named.filter((group) => !pins.includes(group.name)),
+  }
+}
+
 // The sort menu orders the pages inside each group: by order meta, by title, or newest first.
 function sortPages(items, sort) {
   if (sort === 'name') return [...items].sort((a, b) => compareNames(a.title, b.title))
@@ -71,15 +83,17 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
   const [query, setQuery] = useState('')
   const [dragging, setDragging] = useState(null)
   const [dropTarget, setDropTarget] = useState(null)
-  const [pendingOrder, setPendingOrder] = useState(null)
+  const [pending, setPending] = useState(null)
   const [orderError, setOrderError] = useState('')
   const navRef = useRef(null)
   const openedGroup = useRef(null)
   const appliedSort = useRef(sort)
   const movedGroup = useRef(null)
+  const unsent = useRef(null)
   const id = useId()
   const savedOrder = project.groupOrder
-  const groups = useMemo(() => {
+  const savedPins = project.groupPins
+  const list = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase()
     const result = []
     for (const entry of project.docs) {
@@ -89,18 +103,22 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
       if (!group) result.push((group = { name, items: [] }))
       group.items.push(entry)
     }
-    // A moved group shows in its new place at once, while the order is being saved.
-    const order = pendingOrder || (Array.isArray(savedOrder) ? savedOrder : [])
-    return arrangeGroups(result, order).map((group) => ({ ...group, items: sortPages(group.items, sort) }))
-  }, [project.docs, savedOrder, pendingOrder, query, sort])
+    // A moved or pinned group shows in its new place at once, while the change is being saved.
+    const order = pending?.groups || (Array.isArray(savedOrder) ? savedOrder : [])
+    const pins = pending?.pins || (Array.isArray(savedPins) ? savedPins : [])
+    return splitPinned(arrangeGroups(result, order).map((group) => ({ ...group, items: sortPages(group.items, sort) })), pins)
+  }, [project.docs, savedOrder, savedPins, pending, query, sort])
   // The page sort only shows where some group (or the ungrouped list) has more than one page.
   const sortable = useMemo(() => {
     const counts = new Map()
     for (const entry of project.docs) counts.set(entry.group || '', (counts.get(entry.group || '') || 0) + 1)
     return [...counts.values()].some((count) => count > 1)
   }, [project.docs])
-  const named = groups.filter((group) => group.name !== '')
-  const reorderable = owner && !query && named.length > 1
+  // A group moves among the groups of its own section: the pinned ones, or the rest.
+  const pinnedNames = list.pinned.map((group) => group.name)
+  const restNames = list.rest.map((group) => group.name)
+  const sectionOf = (name) => pinnedNames.includes(name) ? pinnedNames : restNames
+  const reorderable = (name) => owner && !query && sectionOf(name).length > 1
 
   // Bring the current document into view when the reader lands on it or clears a search. This must
   // not re-run when a group is toggled: the reader opened that group to look at its pages, and
@@ -125,15 +143,16 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
     navRef.current?.scrollTo({ top: 0 })
   }, [sort])
 
-  // A group moved from the keyboard keeps focus: moving its element in the list can drop focus.
+  // A group moved or pinned from the keyboard keeps focus, on the control that did it: moving its
+  // element in the list can drop focus.
   useEffect(() => {
-    const name = movedGroup.current
+    const moved = movedGroup.current
     movedGroup.current = null
-    if (!name) return
-    const group = [...(navRef.current?.querySelectorAll('[data-group]') || [])].find((element) => element.dataset.group === name)
-    const toggle = group?.querySelector('button')
-    if (toggle && document.activeElement !== toggle) toggle.focus()
-  }, [groups])
+    if (!moved) return
+    const group = [...(navRef.current?.querySelectorAll('[data-group]') || [])].find((element) => element.dataset.group === moved.name)
+    const control = group?.querySelector(`.${moved.pin ? styles.groupPin : styles.groupToggle}`)
+    if (control && document.activeElement !== control) control.focus()
+  }, [list])
 
   // While a group is dragged, holding the pointer near the top or bottom edge of the list scrolls it,
   // so a group can travel the whole list in one drag.
@@ -162,41 +181,73 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
   }, [dragging])
 
   const toggleGroup = (event, name) => {
-    if (!query && collapsed.has(name)) openedGroup.current = event.currentTarget.parentElement
+    if (!query && collapsed.has(name)) openedGroup.current = event.currentTarget.closest('[data-group]')
     onToggle(name)
   }
 
-  // Saves the groups in their on-screen order with `name` moved to `target`, as the project's group
-  // order for everyone. The move shows at once and is undone if the save fails.
-  const moveGroup = async (name, target) => {
-    const names = named.map((group) => group.name)
-    const from = names.indexOf(name)
-    if (pendingOrder || from < 0 || target < 0 || target >= names.length || from === target) return
-    names.splice(target, 0, names.splice(from, 1)[0])
+  // Saves the project's group order (`groups`) or its pinned groups (`pins`) for everyone. The change
+  // shows at once and is undone if the save fails. A change made while another is being saved is sent
+  // after it; a list is sent whole, so only its latest state goes out. `focus` names the group whose
+  // control keeps focus.
+  const save = async (kind, names, focus) => {
+    movedGroup.current = focus
     setOrderError('')
-    setPendingOrder(names)
-    try {
-      const response = await fetch('/api/order/groups', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ slug: project.slug, groups: names }) })
-      const data = await response.json().catch(() => ({}))
-      if (!response.ok || data.error) throw new Error(data.error || 'Could not save the group order.')
-      await onReorder?.()
-    } catch (error) {
-      setOrderError(error.message || 'Could not save the group order. Please try again.')
-    } finally {
-      setPendingOrder(null)
+    setPending((current) => ({ ...current, [kind]: names }))
+    if (unsent.current) { unsent.current[kind] = names; return }
+    unsent.current = { [kind]: names }
+    let failed = ''
+    for (let next; !failed && (next = Object.keys(unsent.current)[0]);) {
+      const groups = unsent.current[next]
+      delete unsent.current[next]
+      try {
+        const response = await fetch(`/api/order/${next}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ slug: project.slug, groups }) })
+        const data = await response.json().catch(() => ({}))
+        if (!response.ok || data.error) throw new Error(data.error || (next === 'pins' ? 'Could not save the pinned groups.' : 'Could not save the group order.'))
+      } catch (error) {
+        failed = error.message || 'Could not save the change. Please try again.'
+      }
+      // The saved lists are read back once nothing more waits to be sent, or a save has failed.
+      if (failed || !Object.keys(unsent.current).length) await onReorder?.()
     }
+    unsent.current = null
+    if (failed) setOrderError(failed)
+    setPending(null)
+  }
+
+  // Moves `name` to `target` among the groups of its section, as they are on screen. Pinned groups
+  // save as the new pins. The rest save as the group order, where each pinned group keeps its own
+  // place, so unpinning puts it back there.
+  const moveGroup = (name, target, focus) => {
+    const section = sectionOf(name)
+    const from = section.indexOf(name)
+    if (from < 0 || target < 0 || target >= section.length || from === target) return
+    const moved = [...section]
+    moved.splice(target, 0, moved.splice(from, 1)[0])
+    if (section === pinnedNames) save('pins', moved, focus)
+    else save('groups', list.named.map((group) => pinnedNames.includes(group.name) ? group.name : moved.shift()), focus)
+  }
+
+  // Pins a group to the top of the list for everyone, above the earlier pins, or unpins it. Worked
+  // from the keyboard, the pin keeps focus where the group lands; a click leaves the list where it is.
+  const togglePin = (event, name) => {
+    // The group leaves the pointer and another takes its place: a double click must not act on that one.
+    if (event.detail > 1) return
+    const pins = pending?.pins || (Array.isArray(savedPins) ? savedPins : [])
+    save('pins', pins.includes(name) ? pins.filter((entry) => entry !== name) : [name, ...pins], event.detail === 0 ? { name, pin: true } : null)
   }
 
   const endDrag = () => { setDragging(null); setDropTarget(null) }
   const groupAt = (event) => event.target.closest?.('[data-group]')?.dataset.group
   // The whole list takes the drop, gaps between groups included: the dragged group lands in the place
-  // of the group under the pointer, or of the last one it crossed.
+  // of the group under the pointer, or of the last one it crossed. It stays in its own section, so
+  // over the other one the last place it crossed still takes the drop.
+  const sameSection = (name) => !!name && sectionOf(name) === sectionOf(dragging)
   const dragOverList = (event) => {
     if (!dragging) return
     event.preventDefault()
     event.dataTransfer.dropEffect = 'move'
     const name = groupAt(event)
-    if (name) setDropTarget(name)
+    if (sameSection(name)) setDropTarget(name)
   }
   const listDragHandlers = {
     onDragEnter: dragOverList,
@@ -204,13 +255,13 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
     onDrop: (event) => {
       if (!dragging) return
       event.preventDefault()
-      const name = groupAt(event) || dropTarget
-      if (name) moveGroup(dragging, named.findIndex((group) => group.name === name))
+      const name = [groupAt(event), dropTarget].find(sameSection)
+      if (name) moveGroup(dragging, sectionOf(name).indexOf(name))
       endDrag()
     },
   }
-  const toggleHandlers = (name) => reorderable ? {
-    draggable: !pendingOrder,
+  const toggleHandlers = (name) => reorderable(name) ? {
+    draggable: true,
     onDragStart: (event) => {
       event.dataTransfer.effectAllowed = 'move'
       event.dataTransfer.setData('text/plain', name)
@@ -220,10 +271,7 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
     onKeyDown: (event) => {
       if (!event.altKey || (event.key !== 'ArrowUp' && event.key !== 'ArrowDown')) return
       event.preventDefault()
-      const target = named.findIndex((group) => group.name === name) + (event.key === 'ArrowUp' ? -1 : 1)
-      if (pendingOrder || target < 0 || target >= named.length) return
-      movedGroup.current = name
-      moveGroup(name, target)
+      moveGroup(name, sectionOf(name).indexOf(name) + (event.key === 'ArrowUp' ? -1 : 1), { name })
     },
     'aria-keyshortcuts': 'Alt+ArrowUp Alt+ArrowDown',
     'aria-describedby': `${id}-reorder`,
@@ -231,8 +279,8 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
   // The line shows where the dragged group lands: it takes the place of the group under the pointer.
   const dropMarker = (name) => {
     if (!dragging || dragging === name || dropTarget !== name) return ''
-    const index = (group) => named.findIndex((entry) => entry.name === group)
-    return index(name) < index(dragging) ? styles.dropBefore : styles.dropAfter
+    const section = sectionOf(name)
+    return section.indexOf(name) < section.indexOf(dragging) ? styles.dropBefore : styles.dropAfter
   }
 
   const documentLink = (entry) => (
@@ -243,6 +291,31 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
       <span>{entry.title}</span>
     </a>
   )
+
+  const groupBlock = (group) => {
+    const open = !!query || !collapsed.has(group.name)
+    const pinned = pinnedNames.includes(group.name)
+    const items = `${id}-group-${list.named.indexOf(group)}`
+    return (
+      <div className={`${styles.documentGroup} ${dragging === group.name ? styles.draggingGroup : ''} ${dropMarker(group.name)}`} key={group.name} data-group={group.name}>
+        <div className={`${styles.groupHead} ${pinned ? styles.pinnedHead : ''} ${owner ? styles.pinnableHead : ''}`}>
+          <button className={styles.groupToggle} onClick={(event) => toggleGroup(event, group.name)} {...toggleHandlers(group.name)}
+            aria-expanded={open} aria-controls={items}>
+            <span className={`${styles.groupCaret} ${open ? styles.groupExpanded : ''}`}><Icon name="chevronRight" size={14} /></span>
+            <span className={styles.groupName}>{group.name}</span>
+            <span className={styles.groupCount}>{group.items.length}</span>
+          </button>
+          {owner ? <button className={styles.groupPin} onClick={(event) => togglePin(event, group.name)}
+            aria-label={pinned ? `Unpin ${group.name}` : `Pin ${group.name} to the top`} title={pinned ? 'Unpin' : 'Pin to the top for everyone'}>
+            <Icon name="pin" size={14} />
+          </button> : pinned && <span className={styles.groupPin}><Icon name="pin" size={14} /></span>}
+        </div>
+        {open && <div id={items} className={styles.groupItems}>
+          {group.items.map(documentLink)}
+        </div>}
+      </div>
+    )
+  }
 
   return (
     <div className={`${styles.navigation} ${mobile ? styles.mobileNavigation : ''}`}>
@@ -287,23 +360,13 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
           <Icon name="chevronDown" size={14} />
         </div>}
       </div>
-      {reorderable && <p id={`${id}-reorder`} className={styles.visuallyHidden}>Drag a group, or press Alt with the up or down arrow, to change the group order for everyone.</p>}
+      {owner && !query && (pinnedNames.length > 1 || restNames.length > 1) && <p id={`${id}-reorder`} className={styles.visuallyHidden}>Drag a group, or press Alt with the up or down arrow, to change the group order for everyone.</p>}
       {orderError && <p className={styles.navigationError} role="alert">{orderError}</p>}
       <nav className={styles.documentNavigation} ref={navRef} aria-label="Project documents" {...listDragHandlers}>
-        {groups.length === 0 && <p className={styles.navigationEmpty}>{query ? 'No matching documents.' : 'No documents yet.'}</p>}
-        {groups.map((group, index) => group.name === '' ? group.items.map(documentLink) : (
-          <div className={`${styles.documentGroup} ${dragging === group.name ? styles.draggingGroup : ''} ${dropMarker(group.name)}`} key={group.name} data-group={group.name}>
-            <button className={styles.groupToggle} onClick={(event) => toggleGroup(event, group.name)} {...toggleHandlers(group.name)}
-              aria-expanded={query ? true : !collapsed.has(group.name)} aria-controls={`${id}-group-${index}`}>
-              <span className={`${styles.groupCaret} ${query || !collapsed.has(group.name) ? styles.groupExpanded : ''}`}><Icon name="chevronRight" size={14} /></span>
-              <span className={styles.groupName}>{group.name}</span>
-              <span className={styles.groupCount}>{group.items.length}</span>
-            </button>
-            {(query || !collapsed.has(group.name)) && <div id={`${id}-group-${index}`} className={styles.groupItems}>
-              {group.items.map(documentLink)}
-            </div>}
-          </div>
-        ))}
+        {list.named.length + list.loose.length === 0 && <p className={styles.navigationEmpty}>{query ? 'No matching documents.' : 'No documents yet.'}</p>}
+        {list.pinned.length > 0 && <div className={styles.pinnedGroups} role="group" aria-label="Pinned groups">{list.pinned.map(groupBlock)}</div>}
+        {list.loose.map(documentLink)}
+        {list.rest.map(groupBlock)}
       </nav>
       <div className={styles.navigationFooter}>
         {authed ? <a href="/"><Icon name="arrowLeft" size={16} />All projects</a> : <span><Icon name="lock" size={14} />Only this document is shared</span>}
