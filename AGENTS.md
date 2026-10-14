@@ -29,7 +29,7 @@ npm run add-user -- <email> <name> <pw> admin   # add an account directly (users
 
 - **Roles**: `member` sees only invited projects (the account's `projects` array), with live
   updates. `admin` sees everything. Admin-only APIs
-  (`/api/chat`·`trigger`·`add`·`remove`·`browse`·`order*`·`hide`·`projects/update`·`share*`·`session*`·`users*`·`claude`)
+  (`/api/chat`·`trigger`·`add`·`remove`·`browse`·`order*`·`pin`·`hide`·`projects/update`·`share*`·`session*`·`users*`·`claude`)
   are double-guarded: middleware path blocking + route guards (`guardAdmin` in `lib/api.mjs`).
   `/api/projects`·`/api/doc`·`/api/watch` filter by the member's `projects`.
   (Note: `public/` media is reachable by any logged-in member who guesses the path.)
@@ -110,6 +110,21 @@ curl -s -b /tmp/moa.jar -X POST http://localhost:5001/api/order/groups \
   -H 'Content-Type: application/json' -d '{"slug":"my-project","groups":["Overview","References"]}'
 ```
 
+### Pinned pages
+
+An admin pins a page with the pin at the end of its row in a project's sidebar (it shows with the
+pointer or keyboard focus on the row, and always on a touch screen). Pinned pages gather in a
+**Pinned** group above everything else in the sidebar, for every reader, the latest pin first; each
+page also stays in its own group, and in the Pinned group it is shown with its group's name. The
+Pinned group shows only while something is pinned and folds like any group. Saved instantly under
+`registry.pins[slug]` as document slugs: a pin goes by the file name, so renaming the file unpins
+it, and a pin whose file is missing shows again when the file is back.
+
+```bash
+curl -s -b /tmp/moa.jar -X POST http://localhost:5001/api/pin \
+  -H 'Content-Type: application/json' -d '{"slug":"my-project","doc":"weekly-report","pinned":true}'
+```
+
 Sort rule (`lib/content.mjs`): `order` ascending → missing = 99 → title `localeCompare`.
 A `title` in `registry.json` overrides `_meta.json`.
 
@@ -168,7 +183,8 @@ stdout (NDJSON) — text, tool calls, results. No API key needed (uses the local
    - Top-of-file meta: `export const title / group / order / date` (`YYYY-MM-DD`) —
      **literals only** (the sidebar index parses them with a regex)
    - Sidebar groups by `group`, sorts by `order` ascending — after any groups an admin dragged
-     into place ("Sidebar group order" above). Readers can sort the pages inside each group by
+     into place ("Sidebar group order" above), and below the Pinned group of the pages an admin
+     pinned ("Pinned pages" above). Readers can sort the pages inside each group by
      title (numeric-aware) or by file mtime from the sidebar's sort menu; the choice is kept per
      project in the browser
    - For registered external projects, write the `.mdx` into the original folder

@@ -39,7 +39,8 @@ Body…
   (`export const order = 10` works; `export const order = N + 1` does not)
 - The sidebar groups by `group` and sorts by `order` ascending within each group (missing → 99 → title order).
   If an admin has dragged the project's groups into an order (`registry.json` `groupOrder`), those groups
-  come first and a new group follows them, by `order`
+  come first and a new group follows them, by `order`. Pages an admin pinned (`pins`) also show in a
+  Pinned group above all groups; a pin goes by the file name, so renaming a file unpins its page
 - `date` is `YYYY-MM-DD`. The project card's "updated" value is the latest `date` across its documents
 - The filename is the URL slug — English kebab-case recommended
 

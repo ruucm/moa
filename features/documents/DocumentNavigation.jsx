@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useEffect, useId, useMemo, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import { Brand, Icon, IconButton, Input, StatusBadge } from '../../components/ui/index.jsx'
 import { InviteButton } from './DocumentActions.jsx'
 import styles from './reader.module.css'
@@ -49,6 +50,12 @@ function compareNames(a, b) {
 
 const updatedAt = (entry) => entry.mtime || Date.parse(entry.date || '') || 0
 
+// A search finds a page by its title or its group's name.
+const matchesQuery = (entry, normalized) => !normalized || `${entry.title} ${entry.group || ''}`.toLocaleLowerCase().includes(normalized)
+
+// The Pinned group opens and closes with the others, under a name no document group can have.
+const PINNED = '\u0000pinned'
+
 // Groups follow the order an admin dragged into place (`saved`): saved groups first, as saved, then
 // the rest by their order meta, with documents outside any group on top. The sort menu never moves them.
 function arrangeGroups(groups, saved = []) {
@@ -73,6 +80,9 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
   const [dropTarget, setDropTarget] = useState(null)
   const [pendingOrder, setPendingOrder] = useState(null)
   const [orderError, setOrderError] = useState('')
+  // Pins and unpins not saved yet, as [slug, pinned], the latest last. They show at once.
+  const [pendingPins, setPendingPins] = useState([])
+  const pinSaves = useRef(Promise.resolve())
   const navRef = useRef(null)
   const openedGroup = useRef(null)
   const appliedSort = useRef(sort)
@@ -83,7 +93,7 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
     const normalized = query.trim().toLocaleLowerCase()
     const result = []
     for (const entry of project.docs) {
-      if (normalized && !`${entry.title} ${entry.group || ''}`.toLocaleLowerCase().includes(normalized)) continue
+      if (!matchesQuery(entry, normalized)) continue
       const name = entry.group || ''
       let group = result.find((item) => item.name === name)
       if (!group) result.push((group = { name, items: [] }))
@@ -101,6 +111,20 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
   }, [project.docs])
   const named = groups.filter((group) => group.name !== '')
   const reorderable = owner && !query && named.length > 1
+  // Pinned pages, the latest pin first, as they will be once the pending changes are saved.
+  const pinnedSlugs = useMemo(() => {
+    const changed = new Map(pendingPins)
+    const saved = (Array.isArray(project.pins) ? project.pins : []).filter((slug) => !changed.has(slug))
+    return [...pendingPins.filter(([, pinned]) => pinned).map(([slug]) => slug).reverse(), ...saved]
+  }, [project.pins, pendingPins])
+  // The Pinned group lists them on top of the list, sorted like the pages of any group. Each page
+  // also stays in its own group.
+  const pinnedPages = useMemo(() => {
+    const normalized = query.trim().toLocaleLowerCase()
+    const pages = pinnedSlugs.map((slug) => project.docs.find((entry) => entry.slug === slug)).filter((entry) => entry && matchesQuery(entry, normalized))
+    return sortPages(pages, sort)
+  }, [project.docs, pinnedSlugs, query, sort])
+  const pinnedOpen = !!query || !collapsed.has(PINNED)
 
   // Bring the current document into view when the reader lands on it or clears a search. This must
   // not re-run when a group is toggled: the reader opened that group to look at its pages, and
@@ -187,6 +211,35 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
     }
   }
 
+  // Pins a page for everyone, or unpins it. Changes are saved one after another, in the order they were
+  // made, and each shows until it is saved — or is undone if the save fails.
+  const togglePin = (event, entry, index) => {
+    // Pinning a page adds a row on top and moves the list down a row, which puts the pin of the page
+    // above under the pointer: the second click of a double click is not for that page.
+    if (event.detail > 1) return
+    const change = [entry.slug, !pinnedSlugs.includes(entry.slug)]
+    setOrderError('')
+    flushSync(() => setPendingPins((current) => [...current.filter(([slug]) => slug !== entry.slug), change]))
+    // Unpinned from the keyboard in the Pinned group, the page leaves it with the pin that had focus:
+    // focus moves to the pin now in its place, or into the list when the group is gone.
+    if (event.detail === 0 && index !== undefined) {
+      const pins = navRef.current?.querySelectorAll(`.${styles.pinnedGroup} .${styles.documentPin}`) || []
+      ;(pins[Math.min(index, pins.length - 1)] || navRef.current?.querySelector('a, button'))?.focus()
+    }
+    pinSaves.current = pinSaves.current.then(async () => {
+      try {
+        const response = await fetch('/api/pin', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ slug: project.slug, doc: entry.slug, pinned: change[1] }) })
+        const data = await response.json().catch(() => ({}))
+        if (!response.ok || data.error) throw new Error(data.error || 'Could not save the pin.')
+        await onReorder?.()
+      } catch (error) {
+        setOrderError(error.message || 'Could not save the pin. Please try again.')
+      } finally {
+        setPendingPins((current) => current.filter((item) => item !== change))
+      }
+    })
+  }
+
   const endDrag = () => { setDragging(null); setDropTarget(null) }
   const groupAt = (event) => event.target.closest?.('[data-group]')?.dataset.group
   // The whole list takes the drop, gaps between groups included: the dragged group lands in the place
@@ -235,14 +288,27 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
     return index(name) < index(dragging) ? styles.dropBefore : styles.dropAfter
   }
 
-  const documentLink = (entry) => (
-    <a key={entry.slug} href={`/p/${encodeURIComponent(project.slug)}/${encodeURIComponent(entry.slug)}`}
-      className={`${styles.documentLink} ${entry.slug === doc?.slug ? styles.currentDocument : ''}`}
-      aria-current={entry.slug === doc?.slug ? 'page' : undefined} onClick={onNavigate}>
-      <Icon name="file" size={16} />
-      <span>{entry.title}</span>
-    </a>
-  )
+  // A page row: the link, and for an admin the pin at its end. In the Pinned group (`index` is the row's
+  // place there) the link also names the page's own group, since pages of different groups often share
+  // a title.
+  const documentRow = (entry, index) => {
+    const pinned = pinnedSlugs.includes(entry.slug)
+    const context = index !== undefined && entry.group
+    return (
+      <div key={entry.slug} className={`${styles.documentRow} ${owner ? styles.pinnableRow : ''} ${pinned ? styles.pinnedRow : ''}`}>
+        <a href={`/p/${encodeURIComponent(project.slug)}/${encodeURIComponent(entry.slug)}`}
+          className={`${styles.documentLink} ${entry.slug === doc?.slug ? styles.currentDocument : ''}`}
+          aria-current={entry.slug === doc?.slug ? 'page' : undefined} onClick={onNavigate}>
+          <Icon name="file" size={16} />
+          <span className={styles.documentLabel}>{entry.title}{context && <>{' '}<small className={styles.documentContext} title={entry.group}>{entry.group}</small></>}</span>
+        </a>
+        {owner && <button className={styles.documentPin} onClick={(event) => togglePin(event, entry, index)}
+          aria-label={`${pinned ? 'Unpin' : 'Pin'} ${entry.title}`} title={pinned ? 'Unpin' : 'Pin to the top for everyone'}>
+          <Icon name="pin" size={14} />
+        </button>}
+      </div>
+    )
+  }
 
   return (
     <div className={`${styles.navigation} ${mobile ? styles.mobileNavigation : ''}`}>
@@ -291,7 +357,18 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
       {orderError && <p className={styles.navigationError} role="alert">{orderError}</p>}
       <nav className={styles.documentNavigation} ref={navRef} aria-label="Project documents" {...listDragHandlers}>
         {groups.length === 0 && <p className={styles.navigationEmpty}>{query ? 'No matching documents.' : 'No documents yet.'}</p>}
-        {groups.map((group, index) => group.name === '' ? group.items.map(documentLink) : (
+        {pinnedPages.length > 0 && <div className={`${styles.documentGroup} ${styles.pinnedGroup}`}>
+          <button className={styles.groupToggle} onClick={() => onToggle(PINNED)} aria-expanded={pinnedOpen} aria-controls={`${id}-pinned`}>
+            <span className={`${styles.groupCaret} ${pinnedOpen ? styles.groupExpanded : ''}`}><Icon name="chevronRight" size={14} /></span>
+            <span className={styles.groupMark}><Icon name="pin" size={14} /></span>
+            <span className={styles.groupName}>Pinned</span>
+            <span className={styles.groupCount}>{pinnedPages.length}</span>
+          </button>
+          {pinnedOpen && <div id={`${id}-pinned`} className={styles.groupItems}>
+            {pinnedPages.map((entry, index) => documentRow(entry, index))}
+          </div>}
+        </div>}
+        {groups.map((group, index) => group.name === '' ? group.items.map((entry) => documentRow(entry)) : (
           <div className={`${styles.documentGroup} ${dragging === group.name ? styles.draggingGroup : ''} ${dropMarker(group.name)}`} key={group.name} data-group={group.name}>
             <button className={styles.groupToggle} onClick={(event) => toggleGroup(event, group.name)} {...toggleHandlers(group.name)}
               aria-expanded={query ? true : !collapsed.has(group.name)} aria-controls={`${id}-group-${index}`}>
@@ -300,7 +377,7 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
               <span className={styles.groupCount}>{group.items.length}</span>
             </button>
             {(query || !collapsed.has(group.name)) && <div id={`${id}-group-${index}`} className={styles.groupItems}>
-              {group.items.map(documentLink)}
+              {group.items.map((entry) => documentRow(entry))}
             </div>}
           </div>
         ))}

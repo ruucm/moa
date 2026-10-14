@@ -15,8 +15,9 @@ const lastPageSlug = `mock-episode-${lastEpisode}-p${pages.length - 1}`
 
 // `episodes` is the default (order-meta) sequence; `updated` gives a group's newest file time, and
 // `age(p)` how much older than that its p-th page is. `titles` are the pages of every group.
-// `saved.groups` stands for the group order stored for the project; the index reads it on every request.
-const openLongProject = async (page, { episodes = sequential, expanded = [], updated = {}, doc = 'overview', saved = {}, titles = pages, age = p => p * 1000 } = {}) => {
+// `saved.groups` and `saved.pins` stand for the group order and the pinned pages stored for the project; the
+// index reads them on every request. `member` opens the project as an invited reader, not an admin.
+const openLongProject = async (page, { episodes = sequential, expanded = [], updated = {}, doc = 'overview', saved = {}, titles = pages, age = p => p * 1000, member = false } = {}) => {
   await login(page)
   await page.route('**/api/claude', route => route.fulfill({ json: { 'moa-design': { skills: [], agents: [] } } }))
   const response = await page.request.get('/api/projects')
@@ -26,9 +27,10 @@ const openLongProject = async (page, { episodes = sequential, expanded = [], upd
   const docs = [{ ...overview, group: '' }, ...episodes.flatMap((number, g) => titles.map((title, p) => ({
     slug: `mock-episode-${number}-p${p}`, title, group: groupName(number), order: g * 20 + p, mtime: updated[number] ? updated[number] - age(p) : null,
   })))]
-  await page.route('**/api/projects', route => route.fulfill({ json: { ...index, projects: index.projects.map(entry => entry.slug === 'moa-design' ? { ...entry, docs, groupOrder: saved.groups } : entry) } }))
+  await page.route('**/api/projects', route => route.fulfill({ json: { ...index, owner: !member, member, projects: index.projects.map(entry => entry.slug === 'moa-design' ? { ...entry, docs, groupOrder: saved.groups, pins: saved.pins } : entry) } }))
   const collapsed = episodes.filter(number => !expanded.includes(number)).map(groupName)
-  await page.addInitScript(names => localStorage.setItem('hub.collapsed.moa-design', JSON.stringify(names)), collapsed)
+  // Set once per test, so a reload keeps what the reader opened or closed since.
+  await page.addInitScript(names => { if (localStorage.getItem('hub.collapsed.moa-design') === null) localStorage.setItem('hub.collapsed.moa-design', JSON.stringify(names)) }, collapsed)
   await page.setViewportSize({ width: 1440, height: 1200 })
   await page.goto(`/p/moa-design/${doc}`)
   const navigation = page.getByRole('navigation', { name: 'Project documents', exact: true })
@@ -206,6 +208,184 @@ test('a group dragged from the end of a long list reaches the top while the list
   expect(saved.groups).toEqual(['레퍼런스', ...sequential].map(groupName))
 })
 
+// An admin pins a page with the pin at the end of its row. Pinned pages gather in a Pinned group on top of
+// the list for every reader, the latest pin first, and stay in their own groups too (saves mocked here).
+const pageSlug = (number, p) => `mock-episode-${number}-p${p}`
+const mockPins = async (page, saved, posts, respond = () => ({ json: { ok: true } })) => {
+  await page.route('**/api/pin', async route => {
+    const body = route.request().postDataJSON()
+    posts.push(body)
+    const reply = await respond(body)
+    if (!reply.status) saved.pins = [...(body.pinned ? [body.doc] : []), ...(saved.pins || []).filter(slug => slug !== body.doc)]
+    return route.fulfill(reply)
+  })
+}
+// `has` takes a locator relative to each div, so it is made from the page, not from the list.
+const pinnedGroup = navigation => navigation.locator('div').filter({ has: navigation.page().getByRole('button', { name: /^Pinned\s?\d+$/ }) }).last()
+const pinnedTitles = navigation => pinnedGroup(navigation).locator('a').evaluateAll(links => links.map(link => link.firstChild.nextSibling.firstChild.textContent))
+const rowIn = (scope, title) => scope.locator('div').filter({ has: scope.page().getByRole('link', { name: title, exact: true }) }).last()
+
+test('pinning a page gathers it in a Pinned group on top of the list, and unpinning takes it out', async ({ page }) => {
+  const saved = {}
+  const posts = []
+  await mockPins(page, saved, posts)
+  const navigation = await openLongProject(page, { episodes: ['105', '106', '100'], expanded: ['106'], saved })
+  const pinnedToggle = navigation.getByRole('button', { name: /^Pinned\s?\d+$/ })
+  const episode = navigation.locator(`[data-group="${groupName('106')}"]`)
+  await expect(pinnedToggle).toHaveCount(0)
+
+  // The pin shows while the pointer is on the row; pressed, the page joins the Pinned group on top.
+  const still = episode.getByRole('button', { name: 'Pin P1 · 스틸', exact: true })
+  await expect(still).toHaveCSS('opacity', '0')
+  await episode.getByRole('link', { name: 'P1 · 스틸', exact: true }).hover()
+  await expect(still).toHaveCSS('opacity', '1')
+  await still.click()
+  await expect(pinnedToggle).toHaveText('Pinned1')
+  expect(posts).toEqual([{ slug: 'moa-design', doc: pageSlug('106', 2), pinned: true }])
+  expect(await navigation.locator('button[aria-expanded]').first().textContent()).toBe('Pinned1')
+  // It stays in its own group, where the pin stays in view to unpin it, and the Pinned row names that group.
+  await expect(episode.getByRole('link', { name: 'P1 · 스틸', exact: true })).toBeVisible()
+  await page.mouse.move(900, 600)
+  await expect(episode.getByRole('button', { name: 'Unpin P1 · 스틸', exact: true })).toHaveCSS('opacity', '1')
+  await expect(pinnedGroup(navigation).getByRole('link', { name: `P1 · 스틸 ${groupName('106')}`, exact: true })).toBeVisible()
+
+  // The latest pin leads, and the Pinned group sits above the pages outside any group.
+  await episode.getByRole('link', { name: 'P4 · 조립', exact: true }).hover()
+  await episode.getByRole('button', { name: 'Pin P4 · 조립', exact: true }).click()
+  await expect.poll(() => pinnedTitles(navigation)).toEqual(['P4 · 조립', 'P1 · 스틸'])
+  const [pinned, loose] = await Promise.all([rect(pinnedGroup(navigation)), rect(navigation.getByRole('link', { name: '더 명확하게, 더 편안하게', exact: true }))])
+  expect(pinned.bottom).toBeLessThanOrEqual(loose.top)
+  await page.reload()
+  await expect.poll(() => pinnedTitles(navigation)).toEqual(['P4 · 조립', 'P1 · 스틸'])
+
+  // The Pinned group folds like any group, and remembers it.
+  await pinnedToggle.click()
+  await expect(pinnedToggle).toHaveAttribute('aria-expanded', 'false')
+  await expect(pinnedGroup(navigation).locator('a')).toHaveCount(0)
+  await page.reload()
+  await expect(pinnedToggle).toHaveAttribute('aria-expanded', 'false')
+  await pinnedToggle.click()
+
+  // A search keeps the pins it hides, and pins from the filtered list too.
+  await page.getByLabel('Search documents').fill('105')
+  await expect(pinnedToggle).toHaveCount(0)
+  const other = navigation.locator(`[data-group="${groupName('105')}"]`)
+  await other.getByRole('link', { name: 'P0 · 대본', exact: true }).hover()
+  await other.getByRole('button', { name: 'Pin P0 · 대본', exact: true }).click()
+  await expect(pinnedToggle).toHaveText('Pinned1')
+  await page.getByLabel('Clear document search').click()
+  await expect.poll(() => pinnedTitles(navigation)).toEqual(['P0 · 대본', 'P4 · 조립', 'P1 · 스틸'])
+
+  // Unpinned from the Pinned group, a page leaves it; the last one takes the group with it.
+  await rowIn(pinnedGroup(navigation), `P4 · 조립 ${groupName('106')}`).hover()
+  await pinnedGroup(navigation).getByRole('button', { name: 'Unpin P4 · 조립', exact: true }).click()
+  await expect.poll(() => pinnedTitles(navigation)).toEqual(['P0 · 대본', 'P1 · 스틸'])
+  expect(posts.at(-1)).toEqual({ slug: 'moa-design', doc: pageSlug('106', 7), pinned: false })
+  await expect(episode.getByRole('button', { name: 'Pin P4 · 조립', exact: true })).toHaveCount(1)
+  for (const title of ['P0 · 대본', 'P1 · 스틸']) await pinnedGroup(navigation).getByRole('button', { name: `Unpin ${title}`, exact: true }).click()
+  await expect(pinnedToggle).toHaveCount(0)
+  expect(saved.pins).toEqual([])
+
+  // A failed save takes the pin back and says why.
+  await page.unroute('**/api/pin')
+  await mockPins(page, saved, posts, () => ({ status: 500, json: { error: '검수용 저장 실패' } }))
+  await episode.getByRole('link', { name: 'P2 · 파일럿', exact: true }).hover()
+  await episode.getByRole('button', { name: 'Pin P2 · 파일럿', exact: true }).click()
+  await expect(page.getByRole('alert').filter({ hasText: '검수용 저장 실패' })).toBeVisible()
+  await expect(pinnedToggle).toHaveCount(0)
+  await expect(episode.getByRole('button', { name: 'Pin P2 · 파일럿', exact: true })).toHaveCount(1)
+})
+
+test('pins work from the keyboard, and focus stays on a pin', async ({ page }) => {
+  const saved = { pins: [pageSlug('106', 0)] }
+  const posts = []
+  await mockPins(page, saved, posts)
+  const navigation = await openLongProject(page, { episodes: ['105', '106'], expanded: ['106'], saved })
+  const episode = navigation.locator(`[data-group="${groupName('106')}"]`)
+  const pin = episode.getByRole('button', { name: 'Pin P2 · 파일럿', exact: true })
+  await pin.focus()
+  await page.keyboard.press('Shift+Tab')
+  await page.keyboard.press('Tab')
+  await expect(pin).toHaveCSS('opacity', '1')
+  await page.keyboard.press('Enter')
+  await expect.poll(() => pinnedTitles(navigation)).toEqual(['P2 · 파일럿', 'P · 대본'])
+  await expect(episode.getByRole('button', { name: 'Unpin P2 · 파일럿', exact: true })).toBeFocused()
+
+  // Unpinned in the Pinned group, a page leaves it and focus moves to the pin that takes its place.
+  await pinnedGroup(navigation).getByRole('button', { name: 'Unpin P2 · 파일럿', exact: true }).focus()
+  await page.keyboard.press('Enter')
+  await expect.poll(() => pinnedTitles(navigation)).toEqual(['P · 대본'])
+  await expect(pinnedGroup(navigation).getByRole('button', { name: 'Unpin P · 대본', exact: true })).toBeFocused()
+  await page.keyboard.press('Enter')
+  await expect(navigation.getByRole('button', { name: /^Pinned\s?\d+$/ })).toHaveCount(0)
+  await expect(navigation.locator(':focus')).toHaveCount(1)
+  expect(posts.map(post => post.pinned)).toEqual([true, false, false])
+})
+
+test('pins made while another is being saved are all saved, in order, and a double click pins once', async ({ page }) => {
+  const saved = { pins: [pageSlug('106', 0)] }
+  const posts = []
+  let release
+  const held = new Promise(resolve => { release = resolve })
+  // The first save stays open until released, like a slow connection.
+  await mockPins(page, saved, posts, async () => { if (posts.length === 1) await held; return { json: { ok: true } } })
+  const navigation = await openLongProject(page, { episodes: ['105', '106'], expanded: ['106'], saved })
+  const episode = navigation.locator(`[data-group="${groupName('106')}"]`)
+  await expect.poll(() => pinnedTitles(navigation)).toEqual(['P · 대본'])
+  // Every change shows at once: the unpinned page leaves, the pinned ones arrive, the latest first.
+  await episode.getByRole('button', { name: 'Unpin P · 대본', exact: true }).click()
+  await expect(navigation.getByRole('button', { name: /^Pinned\s?\d+$/ })).toHaveCount(0)
+  for (const title of ['P0 · 대본', 'P3 · 전량', 'P5 · 완성본']) {
+    await episode.getByRole('link', { name: title, exact: true }).hover()
+    await episode.getByRole('button', { name: `Pin ${title}`, exact: true }).click()
+  }
+  await expect.poll(() => pinnedTitles(navigation)).toEqual(['P5 · 완성본', 'P3 · 전량', 'P0 · 대본'])
+  expect(posts).toEqual([{ slug: 'moa-design', doc: pageSlug('106', 0), pinned: false }])
+  release()
+  await expect.poll(() => posts.map(post => post.doc)).toEqual([0, 1, 5, 8].map(p => pageSlug('106', p)))
+  await page.waitForTimeout(300)
+  expect(await pinnedTitles(navigation)).toEqual(['P5 · 완성본', 'P3 · 전량', 'P0 · 대본'])
+  expect(saved.pins).toEqual([8, 5, 1].map(p => pageSlug('106', p)))
+
+  // Pinning moves the list, so the second click of a double click may land on another page's pin; it is
+  // not taken as a pin.
+  await episode.getByRole('button', { name: 'Pin P2 · 파일럿', exact: true }).dispatchEvent('click', { detail: 2 })
+  await page.waitForTimeout(300)
+  expect(posts).toHaveLength(4)
+  await episode.getByRole('button', { name: 'Pin P2 · 파일럿', exact: true }).dispatchEvent('click', { detail: 1 })
+  await expect.poll(() => posts.length).toBe(5)
+})
+
+test('an invited reader sees the Pinned group and has no pins to press', async ({ page }) => {
+  const navigation = await openLongProject(page, { episodes: ['105', '106'], expanded: ['106'], saved: { pins: [pageSlug('106', 3), 'no-such-page', pageSlug('105', 0)] }, member: true })
+  await expect.poll(() => pinnedTitles(navigation)).toEqual(['P2 · 파일럿', 'P · 대본'])
+  await expect(navigation.getByRole('button', { name: /^(Pin|Unpin) / })).toHaveCount(0)
+  const link = navigation.locator(`[data-group="${groupName('106')}"]`).getByRole('link', { name: 'P2 · 파일럿', exact: true })
+  expect(await link.evaluate(element => getComputedStyle(element).paddingRight)).toBe('12px')
+})
+
+test('on a touch screen every pin stays in view as a full-size target', async ({ browser, baseURL }) => {
+  const context = await browser.newContext({ baseURL, hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } })
+  const page = await context.newPage()
+  try {
+    const saved = {}
+    await mockPins(page, saved, [])
+    await openLongProject(page, { episodes: ['105', '106'], expanded: ['106'], saved })
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.getByRole('button', { name: 'Open document navigation' }).tap()
+    const navigation = page.getByRole('dialog').getByRole('navigation', { name: 'Project documents', exact: true })
+    const pin = navigation.getByRole('button', { name: 'Pin P1 · 스틸', exact: true })
+    await expect(pin).toHaveCSS('opacity', '1')
+    const [button, label] = await Promise.all([rect(pin), rect(navigation.getByRole('link', { name: 'P1 · 스틸', exact: true }).locator('span'))])
+    expect(Math.min(button.width, button.height)).toBeGreaterThanOrEqual(44)
+    expect(label.right).toBeLessThanOrEqual(button.left)
+    await pin.tap()
+    await expect.poll(() => pinnedTitles(navigation)).toEqual(['P1 · 스틸'])
+  } finally {
+    await context.close()
+  }
+})
+
 test('the group order API keeps only the current groups of the project', async ({ page }) => {
   await login(page)
   const registryFile = path.join(reviewRoot, 'registry.json')
@@ -224,5 +404,56 @@ test('the group order API keeps only the current groups of the project', async (
     expect((await page.request.post('/api/order/groups', { data: { slug: 'moa-design' } })).status()).toBe(400)
   } finally {
     fs.writeFileSync(registryFile, registryBefore)
+  }
+})
+
+test('the pin API pins and unpins pages for admins, and a share guest gets no pins', async ({ page, browser, baseURL }) => {
+  await login(page)
+  const registryFile = path.join(reviewRoot, 'registry.json')
+  const registryBefore = fs.readFileSync(registryFile)
+  const project = async request => (await (await request.get('/api/projects')).json()).projects.find(entry => entry.slug === 'moa-design')
+  const pin = (doc, pinned, request = page.request) => request.post('/api/pin', { data: { slug: 'moa-design', doc, pinned } })
+  const member = await browser.newContext({ baseURL })
+  const guest = await browser.newContext({ baseURL })
+  try {
+    for (const doc of ['note-2', 'long-content', 'note-2']) expect((await pin(doc, true)).ok()).toBeTruthy()
+    expect((await project(page.request)).pins).toEqual(['note-2', 'long-content'])
+    expect((await pin('long-content', false)).ok()).toBeTruthy()
+    expect((await pin('never-pinned', false)).ok()).toBeTruthy()
+    expect((await project(page.request)).pins).toEqual(['note-2'])
+    expect((await pin('no-such-page', true)).status()).toBe(404)
+    expect((await page.request.post('/api/pin', { data: { slug: 'no-such-project', doc: 'note-2', pinned: true } })).status()).toBe(404)
+    expect((await page.request.post('/api/pin', { data: { slug: 'moa-design', doc: 'note-2' } })).status()).toBe(400)
+
+    // A pin whose file is missing stays saved, out of the index until the file is back.
+    const registry = JSON.parse(fs.readFileSync(registryFile, 'utf8'))
+    expect(registry.pins).toEqual({ 'moa-design': ['note-2'] })
+    fs.writeFileSync(registryFile, JSON.stringify({ ...registry, pins: { 'moa-design': ['gone-for-now', 'note-2'] } }))
+    expect((await project(page.request)).pins).toEqual(['note-2'])
+
+    // An invited reader gets the pins and cannot change them.
+    const memberPage = await member.newPage()
+    await login(memberPage, 'member@moa.example')
+    expect((await project(memberPage.request)).pins).toEqual(['note-2'])
+    expect((await pin('note-2', false, memberPage.request)).status()).toBe(403)
+
+    // A share link is for one document: the project's pinned pages and group order do not go with it.
+    expect((await page.request.post('/api/order/groups', { data: { slug: 'moa-design', groups: ['프로젝트 개요'] } })).ok()).toBeTruthy()
+    const guestPage = await guest.newPage()
+    await guestPage.goto('/s/review-document-link-only')
+    await expect(guestPage.getByRole('heading', { name: '더 명확하게, 더 편안하게' })).toBeVisible()
+    const shared = await project(guestPage.request)
+    expect(shared.docs.map(entry => entry.slug)).toEqual(['overview'])
+    expect(shared).not.toHaveProperty('pins')
+    expect(shared).not.toHaveProperty('groupOrder')
+
+    // Unpinning the last page removes the project's entry.
+    expect((await pin('note-2', false)).ok()).toBeTruthy()
+    expect(JSON.parse(fs.readFileSync(registryFile, 'utf8')).pins).toEqual({ 'moa-design': ['gone-for-now'] })
+    expect((await project(page.request)).pins).toBeUndefined()
+  } finally {
+    fs.writeFileSync(registryFile, registryBefore)
+    await member.close()
+    await guest.close()
   }
 })

@@ -38,11 +38,24 @@
 .sortControl select { appearance: none; max-width: 100%; min-height: 32px; padding: var(--space-1) var(--space-6) var(--space-1) var(--space-2); border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--color-text-secondary); font: inherit; font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); text-overflow: ellipsis; cursor: pointer; }
 .sortControl select:hover { background: var(--color-surface-subtle); color: var(--color-text-primary); }
 .sortControl > svg { position: absolute; right: var(--space-2); pointer-events: none; color: var(--color-text-muted); }
-.documentLink { display: flex; align-items: flex-start; gap: var(--space-3); min-height: 44px; padding: var(--space-3); margin: var(--space-1) 0; border-radius: var(--radius-sm); color: var(--color-text-secondary); text-decoration: none; font-size: var(--font-size-sm); line-height: 1.55; word-break: keep-all; overflow-wrap: anywhere; transition: color var(--duration-fast), background var(--duration-fast); }
+.documentLink { display: flex; align-items: flex-start; gap: var(--space-3); min-height: 44px; padding: var(--space-3); border-radius: var(--radius-sm); color: var(--color-text-secondary); text-decoration: none; font-size: var(--font-size-sm); line-height: 1.55; word-break: keep-all; overflow-wrap: anywhere; transition: color var(--duration-fast), background var(--duration-fast); }
 .documentLink > svg { margin-top: 3px; color: var(--color-text-muted); }
 .documentLink:hover { background: var(--color-surface-subtle); color: var(--color-text-primary); }
 .currentDocument, .currentDocument:hover { background: var(--color-accent-subtle); color: var(--color-accent-text); font-weight: var(--font-weight-semibold); }
 .currentDocument > svg { color: var(--color-accent-text); }
+/* A page row is its link and, for an admin, the pin at its end. A pinned page keeps the pin in view; on
+   any other page it shows while the pointer or keyboard focus is on the row, and always on a touch
+   screen, where nothing hovers. */
+.documentRow { position: relative; margin: var(--space-1) 0; }
+.documentRow:hover > .documentLink:not(.currentDocument) { background: var(--color-surface-subtle); color: var(--color-text-primary); }
+.pinnableRow > .documentLink { padding-right: var(--space-10); }
+.documentLabel { min-width: 0; }
+.documentContext { display: block; overflow: hidden; color: var(--color-text-muted); font-size: var(--font-size-xs); font-weight: normal; line-height: 1.6; text-overflow: ellipsis; white-space: nowrap; }
+.documentPin { position: absolute; top: 6px; right: 2px; display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: var(--radius-sm); background: none; color: var(--color-text-muted); cursor: pointer; }
+.documentPin:hover { color: var(--color-text-primary); }
+.pinnedRow > .documentPin { color: var(--color-accent-text); }
+.pinnedRow > .documentPin > svg { fill: currentColor; }
+.pinnedRow > .documentPin:hover { color: var(--color-accent-hover); }
 .documentGroup { position: relative; }
 .documentGroup + .documentGroup { margin-top: var(--space-4); }
 .draggingGroup { opacity: .4; }
@@ -56,6 +69,8 @@
 .groupName { flex: 1; min-width: 0; overflow-wrap: anywhere; word-break: keep-all; }
 .groupCount { flex-shrink: 0; color: var(--color-text-muted); font-weight: var(--font-weight-medium); font-variant-numeric: tabular-nums; }
 .groupItems { margin-left: var(--space-1); }
+.groupMark { margin-top: 2px; display: flex; color: var(--color-accent-text); }
+.pinnedGroup { margin-bottom: var(--space-3); padding-bottom: var(--space-3); border-bottom: 1px solid var(--color-border-subtle); }
 .navigationEmpty { margin: var(--space-4) var(--space-3); color: var(--color-text-muted); font-size: var(--font-size-sm); line-height: 1.7; }
 .navigationError { margin: var(--space-3) var(--space-6) 0; color: var(--color-danger-text); font-size: var(--font-size-xs); line-height: 1.6; }
 .navigationFooter { margin: 0 var(--space-5); padding: var(--space-4) 0; border-top: 1px solid var(--color-border-subtle); }
@@ -143,6 +158,14 @@
 .chatDrawer { width: min(32rem, 100vw); border-radius: var(--radius-lg) 0 0 var(--radius-lg); }
 .chatDrawer > div { display: flex; flex: 1; min-height: 0; padding: 0; overflow: hidden; }
 
+@media (hover: hover) {
+  .documentRow:not(.pinnedRow) > .documentPin { opacity: 0; }
+  .documentRow:not(.pinnedRow):is(:hover, :has(:focus-visible)) > .documentPin { opacity: 1; }
+}
+@media (hover: none) {
+  .pinnableRow > .documentLink { padding-right: var(--space-12); }
+  .documentPin { top: 0; right: 0; width: 44px; height: 44px; }
+}
 @media (min-width: 1152px) {
   .documentMain { --figure-bleed: 2rem; }
 }
