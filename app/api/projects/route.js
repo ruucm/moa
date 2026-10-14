@@ -39,7 +39,7 @@ export async function GET(req) {
 
   return j({
     guest: true,
-    projects: [{ ...p, docs: [doc], registered: false, path: undefined, groupOrder: undefined, groupPins: undefined }],
+    projects: [{ ...p, docs: [doc], registered: false, path: undefined }],
     hidden: [], registryProjects: [],
   })
 }
