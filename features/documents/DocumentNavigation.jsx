@@ -211,7 +211,7 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
     }
   }
 
-  // Pins a page for everyone, or unpins it. Changes are saved one after another, in the order they were
+  // Pins a page for this reader, or unpins it. Changes are saved one after another, in the order they were
   // made, and each shows until it is saved — or is undone if the save fails.
   const togglePin = (event, entry, index) => {
     // Pinning a page adds a row on top and moves the list down a row, which puts the pin of the page
@@ -288,22 +288,22 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
     return index(name) < index(dragging) ? styles.dropBefore : styles.dropAfter
   }
 
-  // A page row: the link, and for an admin the pin at its end. In the Pinned group (`index` is the row's
+  // A page row: the link, and for a signed-in reader the pin at its end. In the Pinned group (`index` is the row's
   // place there) the link also names the page's own group, since pages of different groups often share
   // a title.
   const documentRow = (entry, index) => {
     const pinned = pinnedSlugs.includes(entry.slug)
     const context = index !== undefined && entry.group
     return (
-      <div key={entry.slug} className={`${styles.documentRow} ${owner ? styles.pinnableRow : ''} ${pinned ? styles.pinnedRow : ''}`}>
+      <div key={entry.slug} className={`${styles.documentRow} ${authed ? styles.pinnableRow : ''} ${pinned ? styles.pinnedRow : ''}`}>
         <a href={`/p/${encodeURIComponent(project.slug)}/${encodeURIComponent(entry.slug)}`}
           className={`${styles.documentLink} ${entry.slug === doc?.slug ? styles.currentDocument : ''}`}
           aria-current={entry.slug === doc?.slug ? 'page' : undefined} onClick={onNavigate}>
           <Icon name="file" size={16} />
           <span className={styles.documentLabel}>{entry.title}{context && <>{' '}<small className={styles.documentContext} title={entry.group}>{entry.group}</small></>}</span>
         </a>
-        {owner && <button className={styles.documentPin} onClick={(event) => togglePin(event, entry, index)}
-          aria-label={`${pinned ? 'Unpin' : 'Pin'} ${entry.title}`} title={pinned ? 'Unpin' : 'Pin to the top for everyone'}>
+        {authed && <button className={styles.documentPin} onClick={(event) => togglePin(event, entry, index)}
+          aria-label={`${pinned ? 'Unpin' : 'Pin'} ${entry.title}`} title={pinned ? 'Unpin' : 'Pin to the top'}>
           <Icon name="pin" size={14} />
         </button>}
       </div>
@@ -360,7 +360,6 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
         {pinnedPages.length > 0 && <div className={`${styles.documentGroup} ${styles.pinnedGroup}`}>
           <button className={styles.groupToggle} onClick={() => onToggle(PINNED)} aria-expanded={pinnedOpen} aria-controls={`${id}-pinned`}>
             <span className={`${styles.groupCaret} ${pinnedOpen ? styles.groupExpanded : ''}`}><Icon name="chevronRight" size={14} /></span>
-            <span className={styles.groupMark}><Icon name="pin" size={14} /></span>
             <span className={styles.groupName}>Pinned</span>
             <span className={styles.groupCount}>{pinnedPages.length}</span>
           </button>

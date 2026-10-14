@@ -208,8 +208,8 @@ test('a group dragged from the end of a long list reaches the top while the list
   expect(saved.groups).toEqual(['레퍼런스', ...sequential].map(groupName))
 })
 
-// An admin pins a page with the pin at the end of its row. Pinned pages gather in a Pinned group on top of
-// the list for every reader, the latest pin first, and stay in their own groups too (saves mocked here).
+// A reader pins a page with the pin at the end of its row. The reader's pinned pages gather in a Pinned group
+// on top of the list, the latest pin first, and stay in their own groups too (saves mocked here).
 const pageSlug = (number, p) => `mock-episode-${number}-p${p}`
 const mockPins = async (page, saved, posts, respond = () => ({ json: { ok: true } })) => {
   await page.route('**/api/pin', async route => {
@@ -243,10 +243,16 @@ test('pinning a page gathers it in a Pinned group on top of the list, and unpinn
   await expect(pinnedToggle).toHaveText('Pinned1')
   expect(posts).toEqual([{ slug: 'moa-design', doc: pageSlug('106', 2), pinned: true }])
   expect(await navigation.locator('button[aria-expanded]').first().textContent()).toBe('Pinned1')
+  // The Pinned group carries no mark of its own: its toggle shows only the caret.
+  await expect(pinnedToggle.locator('svg')).toHaveCount(1)
   // It stays in its own group, where the pin stays in view to unpin it, and the Pinned row names that group.
   await expect(episode.getByRole('link', { name: 'P1 · 스틸', exact: true })).toBeVisible()
   await page.mouse.move(900, 600)
-  await expect(episode.getByRole('button', { name: 'Unpin P1 · 스틸', exact: true })).toHaveCSS('opacity', '1')
+  const unpinStill = episode.getByRole('button', { name: 'Unpin P1 · 스틸', exact: true })
+  await expect(unpinStill).toHaveCSS('opacity', '1')
+  // A pinned page's pin is the same line icon, drawn in the accent colour rather than filled.
+  await expect(unpinStill).toHaveCSS('color', 'rgb(166, 61, 18)')
+  await expect(unpinStill.locator('svg')).toHaveCSS('fill', 'none')
   await expect(pinnedGroup(navigation).getByRole('link', { name: `P1 · 스틸 ${groupName('106')}`, exact: true })).toBeVisible()
 
   // The latest pin leads, and the Pinned group sits above the pages outside any group.
@@ -356,12 +362,17 @@ test('pins made while another is being saved are all saved, in order, and a doub
   await expect.poll(() => posts.length).toBe(5)
 })
 
-test('an invited reader sees the Pinned group and has no pins to press', async ({ page }) => {
-  const navigation = await openLongProject(page, { episodes: ['105', '106'], expanded: ['106'], saved: { pins: [pageSlug('106', 3), 'no-such-page', pageSlug('105', 0)] }, member: true })
+test('an invited reader pins pages for themselves too', async ({ page }) => {
+  const saved = { pins: [pageSlug('106', 3), 'no-such-page', pageSlug('105', 0)] }
+  const posts = []
+  await mockPins(page, saved, posts)
+  const navigation = await openLongProject(page, { episodes: ['105', '106'], expanded: ['106'], saved, member: true })
   await expect.poll(() => pinnedTitles(navigation)).toEqual(['P2 · 파일럿', 'P · 대본'])
-  await expect(navigation.getByRole('button', { name: /^(Pin|Unpin) / })).toHaveCount(0)
-  const link = navigation.locator(`[data-group="${groupName('106')}"]`).getByRole('link', { name: 'P2 · 파일럿', exact: true })
-  expect(await link.evaluate(element => getComputedStyle(element).paddingRight)).toBe('12px')
+  const episode = navigation.locator(`[data-group="${groupName('106')}"]`)
+  await episode.getByRole('link', { name: 'P5 · 완성본', exact: true }).hover()
+  await episode.getByRole('button', { name: 'Pin P5 · 완성본', exact: true }).click()
+  await expect.poll(() => pinnedTitles(navigation)).toEqual(['P5 · 완성본', 'P2 · 파일럿', 'P · 대본'])
+  expect(posts).toEqual([{ slug: 'moa-design', doc: pageSlug('106', 8), pinned: true }])
 })
 
 test('on a touch screen every pin stays in view as a full-size target', async ({ browser, baseURL }) => {
@@ -407,38 +418,40 @@ test('the group order API keeps only the current groups of the project', async (
   }
 })
 
-test('the pin API pins and unpins pages for admins, and a share guest gets no pins', async ({ page, browser, baseURL }) => {
+test('every account keeps its own pins, and a share guest gets none', async ({ page, browser, baseURL }) => {
   await login(page)
-  const registryFile = path.join(reviewRoot, 'registry.json')
-  const registryBefore = fs.readFileSync(registryFile)
+  const pinsFile = path.join(reviewRoot, 'pins.json')
+  const pinsBefore = fs.existsSync(pinsFile) ? fs.readFileSync(pinsFile) : null
   const project = async request => (await (await request.get('/api/projects')).json()).projects.find(entry => entry.slug === 'moa-design')
-  const pin = (doc, pinned, request = page.request) => request.post('/api/pin', { data: { slug: 'moa-design', doc, pinned } })
+  const pin = (request, doc, pinned, slug = 'moa-design') => request.post('/api/pin', { data: { slug, doc, pinned } })
   const member = await browser.newContext({ baseURL })
   const guest = await browser.newContext({ baseURL })
   try {
-    for (const doc of ['note-2', 'long-content', 'note-2']) expect((await pin(doc, true)).ok()).toBeTruthy()
+    fs.rmSync(pinsFile, { force: true })
+    for (const doc of ['note-2', 'long-content', 'note-2']) expect((await pin(page.request, doc, true)).ok()).toBeTruthy()
     expect((await project(page.request)).pins).toEqual(['note-2', 'long-content'])
-    expect((await pin('long-content', false)).ok()).toBeTruthy()
-    expect((await pin('never-pinned', false)).ok()).toBeTruthy()
+    expect((await pin(page.request, 'long-content', false)).ok()).toBeTruthy()
+    expect((await pin(page.request, 'never-pinned', false)).ok()).toBeTruthy()
     expect((await project(page.request)).pins).toEqual(['note-2'])
-    expect((await pin('no-such-page', true)).status()).toBe(404)
-    expect((await page.request.post('/api/pin', { data: { slug: 'no-such-project', doc: 'note-2', pinned: true } })).status()).toBe(404)
+    expect((await pin(page.request, 'no-such-page', true)).status()).toBe(404)
+    expect((await pin(page.request, 'note-2', true, 'no-such-project')).status()).toBe(404)
     expect((await page.request.post('/api/pin', { data: { slug: 'moa-design', doc: 'note-2' } })).status()).toBe(400)
 
-    // A pin whose file is missing stays saved, out of the index until the file is back.
-    const registry = JSON.parse(fs.readFileSync(registryFile, 'utf8'))
-    expect(registry.pins).toEqual({ 'moa-design': ['note-2'] })
-    fs.writeFileSync(registryFile, JSON.stringify({ ...registry, pins: { 'moa-design': ['gone-for-now', 'note-2'] } }))
-    expect((await project(page.request)).pins).toEqual(['note-2'])
-
-    // An invited reader gets the pins and cannot change them.
+    // An invited reader starts with no pins, keeps their own, and pins only in invited projects.
     const memberPage = await member.newPage()
     await login(memberPage, 'member@moa.example')
-    expect((await project(memberPage.request)).pins).toEqual(['note-2'])
-    expect((await pin('note-2', false, memberPage.request)).status()).toBe(403)
+    expect((await project(memberPage.request)).pins).toBeUndefined()
+    expect((await pin(memberPage.request, 'long-content', true)).ok()).toBeTruthy()
+    expect((await project(memberPage.request)).pins).toEqual(['long-content'])
+    expect((await project(page.request)).pins).toEqual(['note-2'])
+    expect((await pin(memberPage.request, 'overview', true, 'product-research')).status()).toBe(403)
+    expect(JSON.parse(fs.readFileSync(pinsFile, 'utf8'))).toEqual({ 'user:review-admin': { 'moa-design': ['note-2'] }, 'user:review-member': { 'moa-design': ['long-content'] } })
 
-    // A share link is for one document: the project's pinned pages and group order do not go with it.
-    expect((await page.request.post('/api/order/groups', { data: { slug: 'moa-design', groups: ['프로젝트 개요'] } })).ok()).toBeTruthy()
+    // A pin whose file is missing stays saved, out of the index until the file is back.
+    fs.writeFileSync(pinsFile, JSON.stringify({ ...JSON.parse(fs.readFileSync(pinsFile, 'utf8')), 'user:review-admin': { 'moa-design': ['gone-for-now', 'note-2'] } }))
+    expect((await project(page.request)).pins).toEqual(['note-2'])
+
+    // A share link is for one document: no pins go with it, and it cannot pin.
     const guestPage = await guest.newPage()
     await guestPage.goto('/s/review-document-link-only')
     await expect(guestPage.getByRole('heading', { name: '더 명확하게, 더 편안하게' })).toBeVisible()
@@ -446,13 +459,14 @@ test('the pin API pins and unpins pages for admins, and a share guest gets no pi
     expect(shared.docs.map(entry => entry.slug)).toEqual(['overview'])
     expect(shared).not.toHaveProperty('pins')
     expect(shared).not.toHaveProperty('groupOrder')
+    expect((await pin(guestPage.request, 'overview', true)).status()).toBe(401)
 
-    // Unpinning the last page removes the project's entry.
-    expect((await pin('note-2', false)).ok()).toBeTruthy()
-    expect(JSON.parse(fs.readFileSync(registryFile, 'utf8')).pins).toEqual({ 'moa-design': ['gone-for-now'] })
-    expect((await project(page.request)).pins).toBeUndefined()
+    // Unpinning an account's last page removes its entry.
+    expect((await pin(memberPage.request, 'long-content', false)).ok()).toBeTruthy()
+    expect(JSON.parse(fs.readFileSync(pinsFile, 'utf8'))).toEqual({ 'user:review-admin': { 'moa-design': ['gone-for-now', 'note-2'] } })
   } finally {
-    fs.writeFileSync(registryFile, registryBefore)
+    if (pinsBefore) fs.writeFileSync(pinsFile, pinsBefore)
+    else fs.rmSync(pinsFile, { force: true })
     await member.close()
     await guest.close()
   }

@@ -3,13 +3,17 @@
 // Guest failures are answered by cause — previously everything was a 401 "Login required",
 // which hid the real cause (even a deleted/renamed doc showed the login screen).
 import { buildIndex } from '../../../lib/content.mjs'
+import { withPins } from '../../../lib/pins.mjs'
 import { readShareScope } from '../../../lib/auth.mjs'
 import { findShare } from '../../../lib/shares.mjs'
 import { j, getAuth } from '../../../lib/api.mjs'
 
 export async function GET(req) {
   const auth = getAuth(req)
-  if (auth && auth.role === 'admin') return j({ owner: true, ...buildIndex() })
+  if (auth && auth.role === 'admin') {
+    const idx = buildIndex()
+    return j({ owner: true, ...idx, projects: withPins(idx.projects, auth) })
+  }
   // Team member: sees only invited projects (owner:false + member:true)
   if (auth) {
     const granted = new Set(auth.user.projects || [])
@@ -17,7 +21,7 @@ export async function GET(req) {
     return j({
       member: true,
       user: { name: auth.user.name, role: auth.role },
-      projects: idx.projects.filter((p) => granted.has(p.slug)).map((p) => ({ ...p, path: undefined })),
+      projects: withPins(idx.projects.filter((p) => granted.has(p.slug)), auth).map((p) => ({ ...p, path: undefined })),
       hidden: [], registryProjects: [],
     })
   }
@@ -39,7 +43,7 @@ export async function GET(req) {
 
   return j({
     guest: true,
-    projects: [{ ...p, docs: [doc], registered: false, path: undefined, groupOrder: undefined, pins: undefined }],
+    projects: [{ ...p, docs: [doc], registered: false, path: undefined, groupOrder: undefined }],
     hidden: [], registryProjects: [],
   })
 }

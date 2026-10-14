@@ -43,9 +43,9 @@
 .documentLink:hover { background: var(--color-surface-subtle); color: var(--color-text-primary); }
 .currentDocument, .currentDocument:hover { background: var(--color-accent-subtle); color: var(--color-accent-text); font-weight: var(--font-weight-semibold); }
 .currentDocument > svg { color: var(--color-accent-text); }
-/* A page row is its link and, for an admin, the pin at its end. A pinned page keeps the pin in view; on
-   any other page it shows while the pointer or keyboard focus is on the row, and always on a touch
-   screen, where nothing hovers. */
+/* A page row is its link and, for a signed-in reader, the pin at its end. A pinned page keeps the pin
+   in view, as a line in the accent colour; on any other page it shows while the pointer or keyboard
+   focus is on the row, and always on a touch screen, where nothing hovers. */
 .documentRow { position: relative; margin: var(--space-1) 0; }
 .documentRow:hover > .documentLink:not(.currentDocument) { background: var(--color-surface-subtle); color: var(--color-text-primary); }
 .pinnableRow > .documentLink { padding-right: var(--space-10); }
@@ -54,7 +54,6 @@
 .documentPin { position: absolute; top: 6px; right: 2px; display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: var(--radius-sm); background: none; color: var(--color-text-muted); cursor: pointer; }
 .documentPin:hover { color: var(--color-text-primary); }
 .pinnedRow > .documentPin { color: var(--color-accent-text); }
-.pinnedRow > .documentPin > svg { fill: currentColor; }
 .pinnedRow > .documentPin:hover { color: var(--color-accent-hover); }
 .documentGroup { position: relative; }
 .documentGroup + .documentGroup { margin-top: var(--space-4); }
@@ -69,7 +68,6 @@
 .groupName { flex: 1; min-width: 0; overflow-wrap: anywhere; word-break: keep-all; }
 .groupCount { flex-shrink: 0; color: var(--color-text-muted); font-weight: var(--font-weight-medium); font-variant-numeric: tabular-nums; }
 .groupItems { margin-left: var(--space-1); }
-.groupMark { margin-top: 2px; display: flex; color: var(--color-accent-text); }
 .pinnedGroup { margin-bottom: var(--space-3); padding-bottom: var(--space-3); border-bottom: 1px solid var(--color-border-subtle); }
 .navigationEmpty { margin: var(--space-4) var(--space-3); color: var(--color-text-muted); font-size: var(--font-size-sm); line-height: 1.7; }
 .navigationError { margin: var(--space-3) var(--space-6) 0; color: var(--color-danger-text); font-size: var(--font-size-xs); line-height: 1.6; }

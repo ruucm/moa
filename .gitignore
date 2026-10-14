@@ -9,6 +9,7 @@ node_modules/
 users.json
 shares.json
 registry.json
+pins.json
 registry.json.bak*
 
 # Your projects and media live here locally; only the bundled guide ships with the repo.
