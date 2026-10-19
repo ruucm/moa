@@ -9,7 +9,9 @@
 .sidebar { position: sticky; top: 0; height: 100dvh; min-width: 0; border-right: 1px solid var(--color-border-subtle); background: var(--color-surface-page); }
 .navigation { display: flex; flex-direction: column; min-height: 0; height: 100%; }
 .brandRow { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); min-height: 80px; padding: var(--space-5) var(--space-6); }
-.brandRow > button { margin-right: calc(-1 * var(--space-3)); color: var(--color-text-muted); }
+/* The search and the sidebar toggle sit at the end of the brand row, flush with its edge. */
+.brandActions { display: flex; align-items: center; flex-shrink: 0; margin-right: calc(-1 * var(--space-3)); }
+.brandActions > button { color: var(--color-text-muted); }
 .brandLink { display: inline-flex; text-decoration: none; }
 .projectBlock { padding: var(--space-5) var(--space-5) var(--space-6); margin: 0 var(--space-2); border-bottom: 1px solid var(--color-border-subtle); }
 .projectEyebrow { color: var(--color-text-muted); font-size: var(--font-size-xs); margin-bottom: var(--space-2); }
@@ -27,10 +29,6 @@
 .projectMenuBody { padding: var(--space-3); margin-top: var(--space-1); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-sm); background: var(--color-surface-panel); }
 .projectMenuBody p { margin: var(--space-3) 0; font-size: var(--font-size-xs); line-height: 1.6; color: var(--color-text-muted); }
 .projectMenuBody a { display: flex; align-items: center; gap: var(--space-2); font-size: var(--font-size-xs); color: var(--color-text-secondary); text-decoration: none; }
-.navigationSearch { position: relative; margin: var(--space-5) var(--space-5) 0; }
-.navigationSearch > svg { position: absolute; z-index: 1; left: var(--space-3); top: 50%; transform: translateY(-50%); color: var(--color-text-muted); }
-.navigationSearch input { min-height: 40px; padding: var(--space-2) var(--space-8); border-color: var(--color-border-subtle); background: var(--color-surface-panel); font-size: var(--font-size-sm); }
-.clearSearch { position: absolute; right: var(--space-1); top: 50%; transform: translateY(-50%); width: 32px; height: 32px; border: 0; background: none; border-radius: var(--radius-sm); color: var(--color-text-muted); cursor: pointer; }
 .documentNavigation { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: var(--space-3) var(--space-3) var(--space-6); scrollbar-width: thin; scrollbar-color: var(--color-border-subtle) transparent; }
 .navigationHead { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-6) var(--space-6) 0; }
 .navigationLabel { flex-shrink: 0; white-space: nowrap; font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); color: var(--color-text-muted); }
@@ -195,7 +193,7 @@
   .sidebarExpand { display: none; }
   .readerHeader { height: 68px; gap: var(--space-2); padding: 0 var(--space-4); }
   .headerContext { gap: var(--space-2); }
-  .mobileMenu { display: block; margin-left: calc(-1 * var(--space-2)); }
+  .mobileMenu { display: flex; align-items: center; margin-left: calc(-1 * var(--space-2)); }
   .breadcrumb { font-size: var(--font-size-sm); }
   .breadcrumb > span:first-child { max-width: none; flex-shrink: 1; color: var(--color-text-secondary); }
   .breadcrumb > svg, .breadcrumbCurrent { display: none; }
@@ -206,7 +204,6 @@
   .documentFooter { margin-top: var(--space-16); }
   .refreshError { margin: var(--space-4) var(--space-5) 0; }
   .projectMenu > summary { min-height: 44px; }
-  .navigationSearch input { min-height: 44px; }
   .chatDrawer { width: 100vw; border-radius: 0; }
   .smallText :where(h1) { font-size: 1.5rem; }
   .smallText :where(h2) { font-size: 1.1875rem; }

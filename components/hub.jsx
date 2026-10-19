@@ -8,6 +8,7 @@ import ProjectToolbar from '../features/hub/project-toolbar.jsx'
 import useProjectOrder from '../features/hub/use-project-order.js'
 import SettingsPanel from '../features/settings/settings-panel.jsx'
 import AddProjectModal from '../features/settings/add-project-modal.jsx'
+import GlobalSearch, { SearchButton, useSearchShortcut } from '../features/search/GlobalSearch.jsx'
 import styles from '../features/hub/hub.module.css'
 
 export default function Hub() {
@@ -23,6 +24,10 @@ export default function Hub() {
   const workspaceTriggerRef = React.useRef(null)
   const [showSettings, setShowSettings] = useState(false)
   const [showAdd, setShowAdd] = useState(false)
+  // The search over every document (the toolbar's own box only filters the project list below).
+  const [showSearch, setShowSearch] = useState(false)
+  const toggleSearch = React.useCallback(() => setShowSearch(value => !value), [])
+  useSearchShortcut(authed ? toggleSearch : null)
   const [query, setQuery] = useState('')
   const [status, setStatus] = useState('all')
   const [feedback, setFeedback] = useState(null)
@@ -83,6 +88,7 @@ export default function Hub() {
       <div className={styles.topbarInner}>
         <HubIdentity />
         <nav className={styles.topbarActions} aria-label="Workspace management">
+          {authed && <SearchButton onClick={() => setShowSearch(true)} />}
           {owner && <Button className={styles.addButton} onClick={() => setShowAdd(true)}><Icon name="plus" size={17} />New project</Button>}
           {authed && <div className={styles.workspaceMenuWrap}>
             <IconButton ref={workspaceTriggerRef} icon="more" label="Workspace menu" aria-expanded={showWorkspaceMenu} onClick={() => setShowWorkspaceMenu(value => !value)} />
@@ -113,5 +119,6 @@ export default function Hub() {
     </main>
     {owner && showSettings && <SettingsPanel index={index} reload={reload} onClose={() => setShowSettings(false)} />}
     {owner && showAdd && <AddProjectModal reload={reload} onClose={() => setShowAdd(false)} />}
+    {authed && <GlobalSearch open={showSearch} onClose={() => setShowSearch(false)} index={index} />}
   </div>
 }

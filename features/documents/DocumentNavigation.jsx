@@ -2,8 +2,9 @@
 
 import React, { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
-import { Brand, Icon, IconButton, Input, StatusBadge } from '../../components/ui/index.jsx'
+import { Brand, Icon, IconButton, StatusBadge } from '../../components/ui/index.jsx'
 import { InviteButton } from './DocumentActions.jsx'
+import { SearchButton } from '../search/GlobalSearch.jsx'
 import styles from './reader.module.css'
 
 export const sortOptions = [
@@ -50,9 +51,6 @@ function compareNames(a, b) {
 
 const updatedAt = (entry) => entry.mtime || Date.parse(entry.date || '') || 0
 
-// A search finds a page by its title or its group's name.
-const matchesQuery = (entry, normalized) => !normalized || `${entry.title} ${entry.group || ''}`.toLocaleLowerCase().includes(normalized)
-
 // The Pinned group opens and closes with the others, under a name no document group can have.
 const PINNED = '\u0000pinned'
 
@@ -74,8 +72,9 @@ function sortPages(items, sort) {
   return items
 }
 
-export default function DocumentNavigation({ project, projects, doc, authed, owner, collapsed, onToggle, sort = 'order', onSort, onReorder, onNavigate, onCollapse, collapseButtonRef, mobile = false }) {
-  const [query, setQuery] = useState('')
+// `onSearch` opens the search over every project (the sidebar's own filter box is gone: the search finds a page
+// of this project as well as any other, see features/search/GlobalSearch.jsx).
+export default function DocumentNavigation({ project, projects, doc, authed, owner, collapsed, onToggle, sort = 'order', onSort, onReorder, onNavigate, onSearch, onCollapse, collapseButtonRef, mobile = false }) {
   const [dragging, setDragging] = useState(null)
   const [dropTarget, setDropTarget] = useState(null)
   const [pendingOrder, setPendingOrder] = useState(null)
@@ -90,10 +89,8 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
   const id = useId()
   const savedOrder = project.groupOrder
   const groups = useMemo(() => {
-    const normalized = query.trim().toLocaleLowerCase()
     const result = []
     for (const entry of project.docs) {
-      if (!matchesQuery(entry, normalized)) continue
       const name = entry.group || ''
       let group = result.find((item) => item.name === name)
       if (!group) result.push((group = { name, items: [] }))
@@ -102,7 +99,7 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
     // A moved group shows in its new place at once, while the order is being saved.
     const order = pendingOrder || (Array.isArray(savedOrder) ? savedOrder : [])
     return arrangeGroups(result, order).map((group) => ({ ...group, items: sortPages(group.items, sort) }))
-  }, [project.docs, savedOrder, pendingOrder, query, sort])
+  }, [project.docs, savedOrder, pendingOrder, sort])
   // The page sort only shows where some group (or the ungrouped list) has more than one page.
   const sortable = useMemo(() => {
     const counts = new Map()
@@ -110,7 +107,7 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
     return [...counts.values()].some((count) => count > 1)
   }, [project.docs])
   const named = groups.filter((group) => group.name !== '')
-  const reorderable = owner && !query && named.length > 1
+  const reorderable = owner && named.length > 1
   // Pinned pages, the latest pin first, as they will be once the pending changes are saved.
   const pinnedSlugs = useMemo(() => {
     const changed = new Map(pendingPins)
@@ -120,19 +117,18 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
   // The Pinned group lists them on top of the list, sorted like the pages of any group. Each page
   // also stays in its own group.
   const pinnedPages = useMemo(() => {
-    const normalized = query.trim().toLocaleLowerCase()
-    const pages = pinnedSlugs.map((slug) => project.docs.find((entry) => entry.slug === slug)).filter((entry) => entry && matchesQuery(entry, normalized))
+    const pages = pinnedSlugs.map((slug) => project.docs.find((entry) => entry.slug === slug)).filter(Boolean)
     return sortPages(pages, sort)
-  }, [project.docs, pinnedSlugs, query, sort])
-  const pinnedOpen = !!query || !collapsed.has(PINNED)
+  }, [project.docs, pinnedSlugs, sort])
+  const pinnedOpen = !collapsed.has(PINNED)
 
-  // Bring the current document into view when the reader lands on it or clears a search. This must
-  // not re-run when a group is toggled: the reader opened that group to look at its pages, and
-  // pulling the list back to the current document (often the first entry) would throw that away.
+  // Bring the current document into view when the reader lands on it. This must not re-run when a
+  // group is toggled: the reader opened that group to look at its pages, and pulling the list back
+  // to the current document (often the first entry) would throw that away.
   useEffect(() => {
     const nav = navRef.current
     revealInList(nav, nav?.querySelector('[aria-current="page"]'))
-  }, [doc?.slug, query])
+  }, [doc?.slug])
 
   // A group that just opened scrolls only as far as needed for its pages to show. Without this, a
   // group near the end of the list unfolds below the fold and looks as if nothing happened.
@@ -186,7 +182,7 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
   }, [dragging])
 
   const toggleGroup = (event, name) => {
-    if (!query && collapsed.has(name)) openedGroup.current = event.currentTarget.parentElement
+    if (collapsed.has(name)) openedGroup.current = event.currentTarget.parentElement
     onToggle(name)
   }
 
@@ -314,7 +310,10 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
     <div className={`${styles.navigation} ${mobile ? styles.mobileNavigation : ''}`}>
       {!mobile && <div className={styles.brandRow}>
         {authed ? <a href="/" className={styles.brandLink} aria-label="MOA project home"><Brand /></a> : <Brand />}
-        {onCollapse && <IconButton ref={collapseButtonRef} icon="panelLeftClose" label="Hide sidebar" onClick={onCollapse} />}
+        <div className={styles.brandActions}>
+          {onSearch && <SearchButton onClick={onSearch} />}
+          {onCollapse && <IconButton ref={collapseButtonRef} icon="panelLeftClose" label="Hide sidebar" onClick={onCollapse} />}
+        </div>
       </div>}
       <div className={styles.projectBlock}>
         <div className={styles.projectEyebrow}>{authed ? 'Current project' : 'Shared document'}</div>
@@ -339,11 +338,6 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
           </div>
         </details>}
       </div>
-      {(project.docs.length > 5 || query) && <div className={styles.navigationSearch}>
-        <Icon name="search" size={16} />
-        <Input aria-label="Search documents" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search documents" />
-        {query && <button className={styles.clearSearch} aria-label="Clear document search" onClick={() => setQuery('')}><Icon name="x" size={14} /></button>}
-      </div>}
       <div className={styles.navigationHead}>
         <span className={styles.navigationLabel}>Documents</span>
         {sortable && <div className={styles.sortControl}>
@@ -356,7 +350,7 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
       {reorderable && <p id={`${id}-reorder`} className={styles.visuallyHidden}>Drag a group, or press Alt with the up or down arrow, to change the group order for everyone.</p>}
       {orderError && <p className={styles.navigationError} role="alert">{orderError}</p>}
       <nav className={styles.documentNavigation} ref={navRef} aria-label="Project documents" {...listDragHandlers}>
-        {groups.length === 0 && <p className={styles.navigationEmpty}>{query ? 'No matching documents.' : 'No documents yet.'}</p>}
+        {groups.length === 0 && <p className={styles.navigationEmpty}>No documents yet.</p>}
         {pinnedPages.length > 0 && <div className={`${styles.documentGroup} ${styles.pinnedGroup}`}>
           <button className={styles.groupToggle} onClick={() => onToggle(PINNED)} aria-expanded={pinnedOpen} aria-controls={`${id}-pinned`}>
             <span className={`${styles.groupCaret} ${pinnedOpen ? styles.groupExpanded : ''}`}><Icon name="chevronRight" size={14} /></span>
@@ -370,12 +364,12 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
         {groups.map((group, index) => group.name === '' ? group.items.map((entry) => documentRow(entry)) : (
           <div className={`${styles.documentGroup} ${dragging === group.name ? styles.draggingGroup : ''} ${dropMarker(group.name)}`} key={group.name} data-group={group.name}>
             <button className={styles.groupToggle} onClick={(event) => toggleGroup(event, group.name)} {...toggleHandlers(group.name)}
-              aria-expanded={query ? true : !collapsed.has(group.name)} aria-controls={`${id}-group-${index}`}>
-              <span className={`${styles.groupCaret} ${query || !collapsed.has(group.name) ? styles.groupExpanded : ''}`}><Icon name="chevronRight" size={14} /></span>
+              aria-expanded={!collapsed.has(group.name)} aria-controls={`${id}-group-${index}`}>
+              <span className={`${styles.groupCaret} ${!collapsed.has(group.name) ? styles.groupExpanded : ''}`}><Icon name="chevronRight" size={14} /></span>
               <span className={styles.groupName}>{group.name}</span>
               <span className={styles.groupCount}>{group.items.length}</span>
             </button>
-            {(query || !collapsed.has(group.name)) && <div id={`${id}-group-${index}`} className={styles.groupItems}>
+            {!collapsed.has(group.name) && <div id={`${id}-group-${index}`} className={styles.groupItems}>
               {group.items.map((entry) => documentRow(entry))}
             </div>}
           </div>

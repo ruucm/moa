@@ -159,8 +159,10 @@ test('document groups preserve their collapsed state per project across reloads 
   await expect(note).toHaveAttribute('aria-current', 'page')
 })
 
+// The search over every project has its own spec (global-search.spec.mjs); the sidebar lists a project's pages
+// without a filter box of its own.
 for (const width of [390, 1440]) {
-  test(`${width}px active document search remains clearable when SSE reduces the list below six documents`, async ({ page }) => {
+  test(`${width}px the sidebar keeps every page listed while a live update shrinks the list`, async ({ page }) => {
     await page.setViewportSize({ width, height: 1000 })
     await login(page)
     await mockTools(page)
@@ -187,11 +189,9 @@ for (const width of [390, 1440]) {
     if (width < 768) await page.getByRole('button', { name: 'Open document navigation', exact: true }).click()
     const surface = width < 768 ? page.getByRole('dialog', { name: 'Document navigation', exact: true })
       : page.locator('aside').filter({ has: page.getByRole('combobox', { name: 'Switch project', exact: true }) })
-    const search = surface.getByRole('textbox', { name: 'Search documents', exact: true })
     const navigation = surface.getByRole('navigation', { name: 'Project documents', exact: true })
-    await search.fill('관찰')
-    await expect(navigation.getByRole('link')).toHaveCount(1)
-    await expect(navigation.getByRole('link', { name: '관찰과 배움', exact: true })).toBeVisible()
+    await expect(surface.getByRole('textbox')).toHaveCount(0)
+    await expect(navigation.getByRole('link')).toHaveCount(6)
     remaining = 5
     await page.evaluate(() => {
       for (const watcher of window.readerActionWatchers) {
@@ -199,11 +199,6 @@ for (const width of [390, 1440]) {
       }
     })
     await expect(surface.getByText('5 documents', { exact: true })).toBeVisible()
-    await expect(search).toBeVisible()
-    await expect(search).toHaveValue('관찰')
-    await expect(navigation.getByRole('link')).toHaveCount(1)
-    await surface.getByRole('button', { name: 'Clear document search', exact: true }).click()
-    await expect(search).toHaveCount(0)
     await expect(navigation.getByRole('link')).toHaveCount(5)
   })
 }

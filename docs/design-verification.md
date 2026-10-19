@@ -32,7 +32,8 @@ Regression review caught and repaired these presentation-layer issues before mer
   session remain available when it is reopened; Stop still cancels the task.
 - Retrying a document after a rendering error must load the replacement component.
   An updated document received through SSE also clears the error boundary.
-- An active document search stays clearable when a live update reduces the document count.
+- The sidebar keeps every page listed while a live update shrinks the list. (Its filter box was
+  replaced by the search over every project, ⌘K — covered by `tests/global-search.spec.mjs`.)
 - Demo search results expand while searching, and empty states count matching demos.
 - Account identity and project details remain accessible through compact menus.
 - Local font variables apply at the root, the header reflows at 200% text size, and
@@ -77,7 +78,7 @@ The suite covers:
 | Team management | Access editing, admin invitation and revocation, account disable/reactivate/delete, immediate effect on existing sessions |
 | Sharing | Guest and member boundaries, link revocation, clipboard failure and manual-copy fallback |
 | Reports | Relative JSX/JSON imports, shared components, error isolation, retry and SSE recovery, Unicode anchors, legacy CSS, images and video |
-| Navigation | Group persistence, project switching, search after live updates, mobile drawers and focus return |
+| Navigation | Group persistence, project switching, the search over every project (⌘K: titles, page text, access limits, keyboard), mobile drawers and focus return |
 | Claude interface | Stream rendering, prompts and trigger payloads, resume/history/new session, delayed stop, closing and reopening active tasks |
 | Readability | 320, 390, 768, 1280, and 1440px layouts, horizontal overflow, 200% text, reduced motion, automated WCAG A/AA checks |
 

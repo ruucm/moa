@@ -1,10 +1,11 @@
 'use client'
 
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useIndex, useWatch } from '../../lib/client-store.js'
 import { Brand, Button, Drawer, EmptyState, Icon, IconButton, InlineAlert, StatusBadge } from '../../components/ui/index.jsx'
 import DocRenderer from '../../components/doc-renderer.jsx'
 import ChatPanel from '../chat/ChatPanel.jsx'
+import GlobalSearch, { SearchButton, useSearchShortcut } from '../search/GlobalSearch.jsx'
 import DocumentNavigation, { sortOptions } from './DocumentNavigation.jsx'
 import DocumentOutline from './DocumentOutline.jsx'
 import ViewMenu from './ViewMenu.jsx'
@@ -48,6 +49,11 @@ export default function ReaderLayout({ slug, docSlug }) {
   const [chat, setChat] = useState(null)
   const [chatOpen, setChatOpen] = useState(false)
   const [navigationOpen, setNavigationOpen] = useState(false)
+  // The search over every project: opened from the search icon or ⌘K, which also closes it.
+  const [searchOpen, setSearchOpen] = useState(false)
+  const openSearch = useCallback(() => setSearchOpen(true), [])
+  const toggleSearch = useCallback(() => setSearchOpen((current) => !current), [])
+  useSearchShortcut(authed ? toggleSearch : null)
   const [collapsed, setCollapsed] = useState(new Set())
   const [sort, setSort] = useState('order')
   const [view, toggleView] = useReaderView()
@@ -112,7 +118,7 @@ export default function ReaderLayout({ slug, docSlug }) {
 
   const hidden = new Set(index.hidden || [])
   const projects = (index.projects || []).filter((entry) => entry.slug === slug || !hidden.has(entry.slug))
-  const navigationProps = { project, projects, doc, authed, owner, collapsed, onToggle: toggleGroup, sort, onSort: changeSort, onReorder: reload }
+  const navigationProps = { project, projects, doc, authed, owner, collapsed, onToggle: toggleGroup, sort, onSort: changeSort, onReorder: reload, onSearch: openSearch }
   const chatEnabled = !!(chat && cinfo && owner)
   const chatVisible = chatEnabled && chatOpen
   const closeChat = () => {
@@ -130,10 +136,14 @@ export default function ReaderLayout({ slug, docSlug }) {
       <header className={styles.readerHeader}>
         <div className={styles.headerContext}>
           {authed ? <>
-            <div className={styles.mobileMenu}><IconButton icon="menu" label="Open document navigation" onClick={() => setNavigationOpen(true)} /></div>
+            <div className={styles.mobileMenu}>
+              <IconButton icon="menu" label="Open document navigation" onClick={() => setNavigationOpen(true)} />
+              <SearchButton onClick={openSearch} />
+            </div>
             {!view.sidebar && <div className={styles.sidebarExpand}>
               <IconButton ref={showSidebarRef} icon="panelLeft" label="Show sidebar" onClick={() => toggleSidebar(hideSidebarRef)} />
               <a href="/" className={styles.headerBrand} aria-label="MOA project home"><Brand compact /></a>
+              <SearchButton onClick={openSearch} />
             </div>}
           </> : <Brand compact />}
           <nav className={styles.breadcrumb} aria-label="Breadcrumb">
@@ -180,6 +190,7 @@ export default function ReaderLayout({ slug, docSlug }) {
     {authed && <Drawer open={navigationOpen} onClose={() => setNavigationOpen(false)} title="Document navigation" side="left" className={styles.navigationDrawer}>
       <DocumentNavigation {...navigationProps} mobile onNavigate={() => setNavigationOpen(false)} />
     </Drawer>}
+    {authed && <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} index={index} currentSlug={slug} />}
     {chatEnabled && <ChatPanel key={slug} project={project} tools={cinfo} seed={chat.seed} onClose={closeChat} compactHeader={!wideChat} visible={chatVisible}
       renderPanel={(content) => wideChat ? <div className={styles.chatColumn} hidden={!chatVisible}>{content}</div>
         : <Drawer open={chatVisible} onClose={closeChat} title="AI assistant" description={project.title} side="right" className={styles.chatDrawer}>{content}</Drawer>} />}

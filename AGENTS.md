@@ -173,6 +173,24 @@ stdout (NDJSON) — text, tool calls, results. No API key needed (uses the local
   items. Long sessions return the last 400 items and report the rest as `skipped`.
   Sidechains (subagents) and thinking blocks are excluded.
 
+## Search (⌘K)
+
+**⌘K** (Ctrl+K elsewhere), or the search icon at the top of a project's sidebar and in the hub's top bar,
+opens one search over every page the reader may open — admins: every project the hub shows; members: their
+invited projects. It finds a page by its title, its group, its project or the words on the page, lists the
+best matches first (the current project's pages ahead of equal matches elsewhere) with the passage around the
+match, and ↑ ↓ ↵ open one. Before anything is typed it lists the pages updated last. The sidebar has no
+filter box of its own any more.
+
+```bash
+curl -s -b /tmp/moa.jar "http://localhost:5001/api/search?q=weekly%20report&from=my-project"
+# → { query, terms, total, results: [{ slug, project, doc, title, group, date, mtime, excerpt, match, score }] }
+```
+
+`from` is the project the reader is in (ranked up, and searched even if hidden from the hub); `limit` caps the
+results (40 by default, 100 at most); without `q` the response lists the most recently updated pages. The page
+text is read once and kept in memory until the file changes (`lib/search.mjs`).
+
 ## Agent contract (publishing reports)
 
 1. **New project**: create `projects/<slug>/` + `_meta.json` (or use the register API):

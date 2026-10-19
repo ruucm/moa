@@ -174,11 +174,6 @@ test('dragging groups saves the order on screen as the project group order', asy
   await group('101').dragTo(group('제작 시스템'))
   await expect(page.getByRole('alert').filter({ hasText: '검수용 저장 실패' })).toBeVisible()
   await expect.poll(() => groupOrder(navigation)).toEqual(moved)
-
-  // A search shows only part of the list, so its groups cannot be dragged.
-  await page.getByLabel('Search documents').fill('105')
-  await expect(group('105')).toBeVisible()
-  await expect(group('105')).not.toHaveAttribute('draggable', 'true')
 })
 
 test('a group dragged from the end of a long list reaches the top while the list scrolls', async ({ page }) => {
@@ -272,14 +267,12 @@ test('pinning a page gathers it in a Pinned group on top of the list, and unpinn
   await expect(pinnedToggle).toHaveAttribute('aria-expanded', 'false')
   await pinnedToggle.click()
 
-  // A search keeps the pins it hides, and pins from the filtered list too.
-  await page.getByLabel('Search documents').fill('105')
-  await expect(pinnedToggle).toHaveCount(0)
+  // A page pinned from another group — opened for it — leads the Pinned group as the latest pin.
   const other = navigation.locator(`[data-group="${groupName('105')}"]`)
+  await other.getByRole('button', { name: groupButton('105') }).click()
   await other.getByRole('link', { name: 'P0 · 대본', exact: true }).hover()
   await other.getByRole('button', { name: 'Pin P0 · 대본', exact: true }).click()
-  await expect(pinnedToggle).toHaveText('Pinned1')
-  await page.getByLabel('Clear document search').click()
+  await expect(pinnedToggle).toHaveText('Pinned3')
   await expect.poll(() => pinnedTitles(navigation)).toEqual(['P0 · 대본', 'P4 · 조립', 'P1 · 스틸'])
 
   // Unpinned from the Pinned group, a page leaves it; the last one takes the group with it.
