@@ -11,6 +11,7 @@ import { MDXProvider } from '@mdx-js/react'
 import * as shared from './shared.jsx'
 import DesignSystemCatalog from './design-system-catalog.jsx'
 import { Button, Icon, InlineAlert, Skeleton } from './ui/index.jsx'
+import { toLogin } from '../lib/client-store.js'
 import styles from './doc-renderer.module.css'
 
 const documentComponents = {
@@ -67,6 +68,7 @@ export default function DocRenderer({ slug, doc, version = 0 }) {
     fetch(`/api/doc?slug=${encodeURIComponent(slug)}&doc=${encodeURIComponent(doc)}`)
       .then(async (r) => {
         const d = await r.json().catch(() => ({}))
+        if (r.status === 401) toLogin()
         if (d.error || !d.code) return { error: d.error || `Request failed (${r.status})` }
         try {
           const m = evalBundle(d.code)

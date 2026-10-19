@@ -73,9 +73,9 @@ The suite covers:
 
 | Area | Verification |
 | --- | --- |
-| Authentication | Team and owner login, return URL, validation, invitation signup, used/invalid invitations, logout and cookie removal |
+| Authentication | Team and owner login, return URL, validation, invitation signup, used/invalid invitations, password reset links (used, expired, replaced, revoked; earlier sessions refused), logout and cookie removal |
 | Projects | Folder registration and removal without changing originals, search, filters, drag and keyboard ordering, persistence and failed-save rollback, hide and restore, demo results |
-| Team management | Access editing, admin invitation and revocation, account disable/reactivate/delete, immediate effect on existing sessions |
+| Team management | Access editing, admin invitation and revocation, password reset link creation and revocation, account disable/reactivate/delete, immediate effect on existing sessions |
 | Sharing | Guest and member boundaries, link revocation, clipboard failure and manual-copy fallback |
 | Reports | Relative JSX/JSON imports, shared components, error isolation, retry and SSE recovery, Unicode anchors, legacy CSS, images and video |
 | Navigation | Group persistence, project switching, the search over every project (⌘K: titles, page text, access limits, keyboard), mobile drawers and focus return |

@@ -50,7 +50,7 @@ Claude Code skills ship in [`.agents/skills/`](.agents/skills).
 - **Search everything** — ⌘K / Ctrl+K finds any page you can open, by title or by the words on it, and jumps there
 - **Register any folder** — external projects are symlinked in, originals untouched
 - **Share one doc** — tokenized link, recipient sees that doc only
-- **Team accounts** — per-project invites, admin/member roles
+- **Team accounts** — per-project invites, admin/member roles, single-use password reset links
 - **Claude chat in the browser** — headless `claude` per project, streamed live, resumable sessions
 - **Locked by default** — password auth, safe on an open port
 

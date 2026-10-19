@@ -40,8 +40,23 @@ npm run add-user -- <email> <name> <pw> admin   # add an account directly (users
   API: `GET /api/users` · `POST /api/users/invite {role?, projects?}` (`{remove: token}`
   revokes) · `POST /api/users/update {id, disabled|remove|projects}` ·
   `POST /api/signup {token,email,name,password}` (public).
+- **Password reset** (team accounts only — there is no self-service "forgot password"): an admin
+  clicks a member's "Reset password" in ⚙ settings → Team members, which copies a reset link
+  (`/reset/<token>`, 24 hours, single-use) to hand over. Its holder sets a new password (6+
+  characters) and is logged in; the account id, role, projects and pins stay. The old password
+  works until the link is used, a new link replaces the account's earlier one, and pending links
+  are listed under "Pending password resets" with Revoke (disabling the account drops its pending
+  link, so Reactivate doesn't revive it). users.json keeps only a sha256 of each
+  token (`resets`), so a lost link can't be copied again — make a new one. The reset ends every
+  session issued before it: `getAuth` refuses a `moa_user` cookie whose `iat` predates the
+  account's `passwordChangedAt`, and the UI sends such a tab to `/login`. The owner password
+  is reset with `npm run set-password` instead.
+  API: `POST /api/users/reset {id}` → `{token, exp}` (`{id, remove: true}` revokes) ·
+  `GET /api/reset-password?token=…` · `POST /api/reset-password {token,password}` (public).
 - **Cookies**: owner `moa_owner` 30d · team `moa_user` 7d (HMAC-signed). Disabling an
-  account takes effect immediately (`getAuth` checks users.json on every request).
+  account or resetting its password takes effect immediately for every API (`getAuth` checks
+  users.json on every request); the edge middleware can't read users.json, so a stale cookie
+  still opens page shells and `public/` media until it expires.
 - Agents using the HTTP API log in first to get a cookie:
   ```bash
   curl -s -c /tmp/moa.jar -X POST http://localhost:5001/api/login \

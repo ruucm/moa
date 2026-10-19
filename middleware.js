@@ -31,7 +31,7 @@ const isOwner = async (req) => {
 }
 
 // Team account cookie — { u, r, exp }. The edge only checks signature/expiry/role;
-// the users.json cross-check (existence, disabled) happens in the Node routes' getAuth on every request.
+// the users.json cross-check (existence, disabled, password reset) happens in the Node routes' getAuth on every request.
 const userClaims = async (req) => {
   const [b, sig] = cookieVal(req, 'moa_user').split('.')
   if (!b || !sig) return null
@@ -66,6 +66,7 @@ const shareScope = async (req) => {
 const isPublicPath = (p) =>
   p === '/login' || p === '/api/login' || p.startsWith('/s/') ||
   p.startsWith('/join/') || p === '/api/signup' || // invite-link signup — the handler validates the token
+  p.startsWith('/reset/') || p === '/api/reset-password' || // admin-issued password reset link — same, single-use token
 
   p === '/favicon.ico' || p === '/icon.png' || p === '/apple-icon.png' || // home screen icons — Safari fetches them without cookies
   p === '/manifest.webmanifest' // the web app manifest is also requested without cookies
