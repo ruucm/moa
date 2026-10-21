@@ -78,7 +78,7 @@ The suite covers:
 | Team management | Access editing, admin invitation and revocation, password reset link creation and revocation, account disable/reactivate/delete, immediate effect on existing sessions |
 | Sharing | Guest and member boundaries, link revocation, clipboard failure and manual-copy fallback |
 | Reports | Relative JSX/JSON imports, shared components, error isolation, retry and SSE recovery, Unicode anchors, legacy CSS, images and video |
-| Navigation | Group persistence, project switching, the search over every project (⌘K: titles, page text, access limits, keyboard), mobile drawers and focus return |
+| Navigation | Group persistence, project switching, the search over every project (⌘K: titles, page text, access limits, keyboard, the preview of the selected page and its link actions), mobile drawers and focus return |
 | Claude interface | Stream rendering, prompts and trigger payloads, resume/history/new session, delayed stop, closing and reopening active tasks |
 | Readability | 320, 390, 768, 1280, and 1440px layouts, horizontal overflow, 200% text, reduced motion, automated WCAG A/AA checks |
 

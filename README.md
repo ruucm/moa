@@ -47,7 +47,7 @@ Claude Code skills ship in [`.agents/skills/`](.agents/skills).
 
 - **Live reload** — SSE file watching, no restarts
 - **Reader controls** — collapsible sidebar, plus view options for small text, full width and the table of contents; remembered across documents
-- **Search everything** — ⌘K / Ctrl+K finds any page you can open, by title or by the words on it, and jumps there
+- **Search everything** — ⌘K / Ctrl+K finds any page you can open, by title or by the words on it, previews the selected page beside the results, and jumps there
 - **Register any folder** — external projects are symlinked in, originals untouched
 - **Share one doc** — tokenized link, recipient sees that doc only
 - **Team accounts** — per-project invites, admin/member roles, single-use password reset links

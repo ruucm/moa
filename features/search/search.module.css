@@ -1,13 +1,19 @@
-/* The search palette (⌘K): one field over the whole hub, results beneath it, key hints along the bottom. */
+/* The search palette (⌘K): one field over the whole hub, results beneath it — and beside them, with room, the
+   selected page as it renders — with key hints along the bottom. */
 .overlay { position: fixed; inset: 0; z-index: var(--z-overlay); background: var(--color-overlay); backdrop-filter: blur(3px); animation: fadeIn var(--duration-normal) var(--ease-out); }
 .palette { position: fixed; z-index: var(--z-dialog); top: clamp(16px, 12vh, 160px); left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; width: min(640px, calc(100vw - 32px)); max-height: min(72dvh, 640px); overflow: hidden; background: var(--color-surface-panel); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); outline: none; animation: paletteIn var(--duration-normal) var(--ease-out); }
+/* With the preview beside the list the palette is wider, and as tall as it may be: the page needs the room even when the list is short. */
+.withPreview { width: min(1040px, calc(100vw - 32px)); height: min(80dvh, 760px); max-height: none; }
 .inputRow { display: flex; align-items: center; gap: var(--space-3); flex-shrink: 0; padding: var(--space-2) var(--space-3) var(--space-2) var(--space-5); border-bottom: 1px solid var(--color-border-subtle); color: var(--color-text-muted); }
 .inputRow > svg { flex: none; }
 .input { flex: 1; min-width: 0; min-height: 48px; padding: 0; border: 0; background: none; color: var(--color-text-primary); font-size: var(--font-size-base); outline: none; }
 .input::placeholder { color: var(--color-text-muted); opacity: 1; }
 .kbd { display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 22px; padding: 0 6px; border: 1px solid var(--color-border-subtle); border-bottom-width: 2px; border-radius: 6px; background: var(--color-surface-page); color: var(--color-text-muted); font-family: var(--font-sans); font-size: 11px; font-weight: var(--font-weight-semibold); line-height: 1; white-space: nowrap; }
 .inputRow > .kbd { margin-right: var(--space-2); }
-.results { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: var(--space-2); scrollbar-width: thin; scrollbar-color: var(--color-border-subtle) transparent; }
+.previewToggle { flex: none; }
+.body { display: flex; flex: 1; min-height: 0; }
+.withPreview .body { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); grid-template-rows: minmax(0, 1fr); }
+.results { flex: 1; min-width: 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: var(--space-2); scrollbar-width: thin; scrollbar-color: var(--color-border-subtle) transparent; }
 .groupLabel { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-3) var(--space-3) var(--space-1); color: var(--color-text-muted); font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); }
 .option { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; column-gap: var(--space-3); align-items: start; padding: var(--space-3); border-radius: var(--radius-sm); color: var(--color-text-primary); text-decoration: none; cursor: pointer; }
 .option > svg { margin-top: 3px; color: var(--color-text-muted); }
@@ -26,6 +32,21 @@
 .status { margin: 0; padding: var(--space-10) var(--space-6); color: var(--color-text-muted); font-size: var(--font-size-sm); line-height: 1.7; text-align: center; word-break: keep-all; overflow-wrap: anywhere; }
 .status strong { color: var(--color-text-secondary); font-weight: var(--font-weight-medium); }
 .statusError { color: var(--color-danger-text); }
+/* The preview: the page's project and group with the link actions on one line, then the page itself, scrolling on its own. */
+.preview { display: flex; flex-direction: column; min-width: 0; min-height: 0; border-left: 1px solid var(--color-border-subtle); }
+.previewHead { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-shrink: 0; padding: var(--space-2) var(--space-3) 0 var(--space-6); }
+.previewCrumbs { display: flex; flex-wrap: wrap; min-width: 0; gap: 0 var(--space-2); color: var(--color-text-muted); font-size: var(--font-size-xs); line-height: 1.6; }
+.previewCrumbs > span { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.previewCrumbs > span + span::before { content: '/'; margin-right: var(--space-2); }
+.previewActions { display: flex; flex-shrink: 0; gap: var(--space-1); }
+.previewBody { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: var(--space-2) var(--space-6) var(--space-8); cursor: pointer; outline: none; scrollbar-width: thin; scrollbar-color: var(--color-border-subtle) transparent; }
+.previewBody:focus-visible { box-shadow: inset 0 0 0 2px var(--color-accent-border); }
+.previewTitle { margin: 0; color: var(--color-text-primary); font-size: var(--font-size-lg); font-weight: var(--font-weight-semibold); line-height: 1.4; word-break: keep-all; overflow-wrap: anywhere; }
+.previewMeta { display: flex; flex-wrap: wrap; gap: 0 var(--space-2); margin-top: var(--space-1); color: var(--color-text-muted); font-size: var(--font-size-xs); line-height: 1.6; }
+.previewMeta > * + *::before { content: '·'; margin-right: var(--space-2); }
+/* The page is shown smaller than the reader shows it, as one piece — tables, figures and decks included. */
+.previewDocument { margin-top: var(--space-5); zoom: .8; }
+.previewEmpty { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-2); padding: var(--space-6); color: var(--color-text-muted); font-size: var(--font-size-sm); }
 .footer { display: flex; align-items: center; gap: var(--space-5); flex-shrink: 0; padding: var(--space-2) var(--space-5); border-top: 1px solid var(--color-border-subtle); color: var(--color-text-muted); font-size: var(--font-size-xs); }
 .footer > span { display: inline-flex; align-items: center; gap: var(--space-2); }
 .footer > span > span { display: inline-flex; gap: 2px; }
@@ -33,7 +54,9 @@
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 @keyframes paletteIn { from { opacity: 0; transform: translate(-50%, -8px); } to { opacity: 1; transform: translate(-50%, 0); } }
 @media (max-width: 767px) {
-  .palette { top: 8px; width: calc(100vw - 16px); max-height: calc(100dvh - 16px); border-radius: var(--radius-md); }
+  .palette, .withPreview { top: 8px; width: calc(100vw - 16px); height: auto; max-height: calc(100dvh - 16px); border-radius: var(--radius-md); }
+  .withPreview .body { display: flex; }
+  .preview, .previewToggle { display: none; }
   .inputRow { padding-left: var(--space-4); }
   .inputRow > .kbd { display: none; }
   .footer { display: none; }

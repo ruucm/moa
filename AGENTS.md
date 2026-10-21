@@ -194,8 +194,14 @@ stdout (NDJSON) — text, tool calls, results. No API key needed (uses the local
 opens one search over every page the reader may open — admins: every project the hub shows; members: their
 invited projects. It finds a page by its title, its group, its project or the words on the page, lists the
 best matches first (the current project's pages ahead of equal matches elsewhere) with the passage around the
-match, and ↑ ↓ ↵ open one. Before anything is typed it lists the pages updated last. The sidebar has no
-filter box of its own any more.
+match, and ↑ ↓ ↵ open one (⌘↵ in a new tab). Before anything is typed it lists the pages updated last. The
+sidebar has no filter box of its own any more.
+
+Beside the list, on screens 768px and wider, the selected page is previewed as it renders — the same bundle
+the reader shows (`/api/doc`), read-only: the page is inert, so nothing in it takes a click or a key. The
+preview follows ↑ ↓ and the pointer, its header copies the page's link or opens it in a new tab, and a click on
+the page opens it. The panel icon in the search field hides the preview; the choice is kept in the browser
+(`hub.search.preview`). Phones show the list only.
 
 ```bash
 curl -s -b /tmp/moa.jar "http://localhost:5001/api/search?q=weekly%20report&from=my-project"
