@@ -45,6 +45,9 @@ Body…
   drag onto the group).
   That rewrites the `title` / `group` literal in the file, so read the page again before you rewrite it — a page
   written from a stale copy puts the old title and group back
+- An admin can also archive a page or a whole group from the sidebar (its menu): the file stays and still opens, it is
+  only listed under Archived at the end of the sidebar (`registry.json` `archived[slug]`, by file and group name).
+  Don't delete or move pages to tidy a sidebar — archiving is what that is for
 - `date` is `YYYY-MM-DD`. The project card's "updated" value is the latest `date` across its documents
 - The filename is the URL slug — English kebab-case recommended
 

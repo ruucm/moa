@@ -15,9 +15,10 @@ const lastPageSlug = `mock-episode-${lastEpisode}-p${pages.length - 1}`
 
 // `episodes` is the default (order-meta) sequence; `updated` gives a group's newest file time, and
 // `age(p)` how much older than that its p-th page is. `titles` are the pages of every group.
-// `saved.groups` and `saved.pins` stand for the group order and the pinned pages stored for the project, and
-// `saved.docs` for titles and groups saved in the pages' files ({ [slug]: { title?, group? } }); the index reads
-// them on every request. `member` opens the project as an invited reader, not an admin.
+// `saved.groups` and `saved.pins` stand for the group order and the pinned pages stored for the project,
+// `saved.archived` for its archived pages and groups ({ groups, docs }), and `saved.docs` for titles and groups
+// saved in the pages' files ({ [slug]: { title?, group? } }); the index reads them on every request. `member` opens
+// the project as an invited reader, not an admin.
 const openLongProject = async (page, { episodes = sequential, expanded = [], updated = {}, doc = 'overview', saved = {}, titles = pages, age = p => p * 1000, member = false } = {}) => {
   await login(page)
   await page.route('**/api/claude', route => route.fulfill({ json: { 'moa-design': { skills: [], agents: [] } } }))
@@ -28,7 +29,7 @@ const openLongProject = async (page, { episodes = sequential, expanded = [], upd
   const docs = [{ ...overview, group: '' }, ...episodes.flatMap((number, g) => titles.map((title, p) => ({
     slug: `mock-episode-${number}-p${p}`, title, group: groupName(number), order: g * 20 + p, mtime: updated[number] ? updated[number] - age(p) : null,
   })))]
-  await page.route('**/api/projects', route => route.fulfill({ json: { ...index, owner: !member, member, projects: index.projects.map(entry => entry.slug === 'moa-design' ? { ...entry, docs: docs.map(doc => ({ ...doc, ...saved.docs?.[doc.slug] })), groupOrder: saved.groups, pins: saved.pins } : entry) } }))
+  await page.route('**/api/projects', route => route.fulfill({ json: { ...index, owner: !member, member, projects: index.projects.map(entry => entry.slug === 'moa-design' ? { ...entry, docs: docs.map(doc => ({ ...doc, ...saved.docs?.[doc.slug] })), groupOrder: saved.groups, pins: saved.pins, archived: saved.archived } : entry) } }))
   const collapsed = episodes.filter(number => !expanded.includes(number)).map(groupName)
   // Set once per test, so a reload keeps what the reader opened or closed since.
   await page.addInitScript(names => { if (localStorage.getItem('hub.collapsed.moa-design') === null) localStorage.setItem('hub.collapsed.moa-design', JSON.stringify(names)) }, collapsed)
@@ -220,6 +221,21 @@ const mockPins = async (page, saved, posts, respond = () => ({ json: { ok: true 
 const pinnedGroup = navigation => navigation.locator('div').filter({ has: navigation.page().getByRole('button', { name: /^Pinned\s?\d+$/ }) }).last()
 const pinnedTitles = navigation => pinnedGroup(navigation).locator('a').evaluateAll(links => links.map(link => link.firstChild.nextSibling.firstChild.textContent))
 const rowIn = (scope, title) => scope.locator('div').filter({ has: scope.page().getByRole('link', { name: title, exact: true }) }).last()
+// The archived pages and groups saved for the project, as the archive API would keep them.
+const mockArchive = async (page, saved, posts, respond = () => ({ json: { ok: true } })) => {
+  await page.route('**/api/archive', async route => {
+    const body = route.request().postDataJSON()
+    posts.push(body)
+    const reply = await respond(body)
+    if (!reply.status) {
+      const key = body.doc ? 'docs' : 'groups'
+      const name = body.doc || body.group
+      const list = (saved.archived?.[key] || []).filter(item => item !== name)
+      saved.archived = { groups: [], docs: [], ...saved.archived, [key]: body.archived ? [...list, name] : list }
+    }
+    return route.fulfill(reply)
+  })
+}
 
 test('pinning a page gathers it in a Pinned group on top of the list, and unpinning takes it out', async ({ page }) => {
   const saved = {}
@@ -557,7 +573,10 @@ test('the page menu, from a right click or Shift+F10, renames a page or pins it;
   await page.keyboard.press('ArrowDown')
   await expect(menu.getByRole('menuitem', { name: 'Pin to the top', exact: true })).toBeFocused()
   await page.keyboard.press('ArrowDown')
+  await expect(menu.getByRole('menuitem', { name: 'Archive', exact: true })).toBeFocused()
+  await page.keyboard.press('ArrowDown')
   await expect(menu.getByRole('menuitem', { name: 'Rename', exact: true })).toBeFocused()
+  await page.keyboard.press('End')
   await page.keyboard.press('ArrowUp')
   await page.keyboard.press('Enter')
   await expect(menu).toHaveCount(0)
@@ -608,9 +627,97 @@ test('the page menu, from a right click or Shift+F10, renames a page or pins it;
   await expect(episode.getByRole('link', { name: '저장 안 될 제목', exact: true })).toHaveCount(0)
 })
 
-test('an invited reader cannot rename or move pages', async ({ page }) => {
-  const navigation = await openLongProject(page, { episodes: ['105', '106'], expanded: ['106'], member: true })
-  const link = pageLink(navigation, pageSlug('106', 2))
+test('a page or a whole group is archived from its menu into an Archived group at the end of the list, and brought back from there', async ({ page }) => {
+  const saved = {}
+  const posts = []
+  const pins = []
+  await mockArchive(page, saved, posts)
+  await mockPins(page, saved, pins)
+  const navigation = await openLongProject(page, { episodes: ['105', '106', '100'], expanded: ['106', '100'], saved })
+  const mainToggle = number => navigation.locator(`[data-group="${groupName(number)}"]`).getByRole('button', { name: groupButton(number) })
+  const archivedToggle = navigation.getByRole('button', { name: /^Archived\s?\d+$/ })
+  const archivedGroup = navigation.locator('div').filter({ has: page.getByRole('button', { name: /^Archived\s?\d+$/ }) }).last()
+  const archivedSub = number => archivedGroup.locator(`[data-archived-group="${groupName(number)}"]`)
+  const menuOf = async (locator, name) => { await locator.click({ button: 'right' }); return page.getByRole('menu', { name, exact: true }) }
+  const still = pageSlug('106', 2)
+  await expect(archivedToggle).toHaveCount(0)
+
+  // Archived from its menu, a page leaves its group for the Archived group, which starts closed and takes focus.
+  await (await menuOf(pageLink(navigation, still), 'P1 · 스틸')).getByRole('menuitem', { name: 'Archive', exact: true }).click()
+  await expect(pageLink(navigation, still)).toHaveCount(0)
+  await expect(mainToggle('106')).toHaveText(`${groupName('106')}${pages.length - 1}`)
+  await expect(archivedToggle).toHaveText('Archived1')
+  await expect(archivedToggle).toHaveAttribute('aria-expanded', 'false')
+  await expect(archivedToggle).toBeFocused()
+  expect(posts).toEqual([{ slug: 'moa-design', doc: still, archived: true }])
+  expect(await groupOrder(navigation)).toEqual(['105', '106', '100', 'Archived1'])
+
+  // It is listed there with the name of its group and without a pin; its menu offers to bring it back, not to pin it.
+  await archivedToggle.click()
+  const archivedLink = archivedGroup.getByRole('link', { name: `P1 · 스틸 ${groupName('106')}`, exact: true })
+  await expect(archivedLink).toBeVisible()
+  await expect(archivedGroup.getByRole('button', { name: /^Pin / })).toHaveCount(0)
+  const menu = await menuOf(archivedLink, 'P1 · 스틸')
+  await expect(menu.getByRole('menuitem')).toHaveCount(2)
+  await expect(menu.getByRole('menuitem', { name: 'Unarchive', exact: true })).toBeVisible()
+  await page.keyboard.press('Escape')
+  await page.reload()
+  await expect(archivedToggle).toHaveText('Archived1')
+  await expect(archivedLink).toBeVisible()
+
+  // A whole group goes in from its heading's menu, with its pages, open as it was; its page's menu acts on the group.
+  await (await menuOf(mainToggle('100'), groupName('100'))).getByRole('menuitem', { name: 'Archive group', exact: true }).click()
+  await expect(mainToggle('100')).toHaveCount(0)
+  await expect(archivedToggle).toHaveText(`Archived${pages.length + 1}`)
+  await expect(archivedToggle).toBeFocused()
+  expect(posts.at(-1)).toEqual({ slug: 'moa-design', group: groupName('100'), archived: true })
+  await expect(archivedSub('100').getByRole('button', { name: groupButton('100') })).toHaveAttribute('aria-expanded', 'true')
+  const inGroup = archivedSub('100').getByRole('link', { name: 'P1 · 스틸', exact: true })
+  await expect(inGroup).toBeVisible()
+  await expect((await menuOf(inGroup, 'P1 · 스틸')).getByRole('menuitem', { name: 'Unarchive group', exact: true })).toBeVisible()
+  await page.keyboard.press('Escape')
+  await page.reload()
+  await expect(mainToggle('100')).toHaveCount(0)
+  await expect(inGroup).toBeVisible()
+
+  // Brought back from its menu, a group returns to its place, and focus goes with it.
+  await (await menuOf(archivedSub('100').getByRole('button', { name: groupButton('100') }), groupName('100'))).getByRole('menuitem', { name: 'Unarchive group', exact: true }).click()
+  await expect(mainToggle('100')).toBeVisible()
+  await expect(mainToggle('100')).toBeFocused()
+  expect(await groupOrder(navigation)).toEqual(['105', '106', '100', 'Archived1'])
+  expect(posts.at(-1)).toEqual({ slug: 'moa-design', group: groupName('100'), archived: false })
+
+  // So does a page, into its group; with nothing left in it, the Archived group goes.
+  await (await menuOf(archivedLink, 'P1 · 스틸')).getByRole('menuitem', { name: 'Unarchive', exact: true }).click()
+  await expect(pageLink(navigation, still)).toBeVisible()
+  await expect(pageLink(navigation, still)).toBeFocused()
+  await expect(archivedToggle).toHaveCount(0)
+  expect(posts.at(-1)).toEqual({ slug: 'moa-design', doc: still, archived: false })
+
+  // A pinned page that is archived leaves the Pinned group too, and comes back to it.
+  await pageLink(navigation, still).hover()
+  await navigation.locator(`[data-group="${groupName('106')}"]`).getByRole('button', { name: 'Pin P1 · 스틸', exact: true }).click()
+  await expect.poll(() => pinnedTitles(navigation)).toEqual(['P1 · 스틸'])
+  await (await menuOf(pageLink(navigation, still), 'P1 · 스틸')).getByRole('menuitem', { name: 'Archive', exact: true }).click()
+  await expect(pinnedGroup(navigation)).toHaveCount(0)
+  await expect(archivedToggle).toHaveText('Archived1')
+  await (await menuOf(archivedLink, 'P1 · 스틸')).getByRole('menuitem', { name: 'Unarchive', exact: true }).click()
+  await expect.poll(() => pinnedTitles(navigation)).toEqual(['P1 · 스틸'])
+  await expect(archivedToggle).toHaveCount(0)
+
+  // A failed save puts things back and says why.
+  await page.unroute('**/api/archive')
+  await mockArchive(page, saved, posts, () => ({ status: 500, json: { error: '검수용 저장 실패' } }))
+  await (await menuOf(mainToggle('105'), groupName('105'))).getByRole('menuitem', { name: 'Archive group', exact: true }).click()
+  await expect(page.getByRole('alert').filter({ hasText: '검수용 저장 실패' })).toBeVisible()
+  await expect(mainToggle('105')).toBeVisible()
+  await expect(archivedToggle).toHaveCount(0)
+})
+
+test('an invited reader cannot rename, move or archive pages, and sees what is archived', async ({ page }) => {
+  const saved = { archived: { docs: [pageSlug('106', 2)], groups: [groupName('105')] } }
+  const navigation = await openLongProject(page, { episodes: ['105', '106'], expanded: ['106'], member: true, saved })
+  const link = pageLink(navigation, pageSlug('106', 3))
   await link.hover()
   await expect(navigation.getByRole('button', { name: /^Rename / })).toHaveCount(0)
   await expect(link).not.toHaveAttribute('draggable', 'true')
@@ -621,6 +728,19 @@ test('an invited reader cannot rename or move pages', async ({ page }) => {
   await page.keyboard.press('F2')
   await expect(navigation.getByRole('textbox')).toHaveCount(0)
   await page.keyboard.press('Shift+F10')
+  await page.waitForTimeout(300)
+  await expect(page.getByRole('menu')).toHaveCount(0)
+
+  // The archived page and group are in the Archived group, out of the list, without a menu.
+  const archivedToggle = navigation.getByRole('button', { name: /^Archived\s?\d+$/ })
+  await expect(archivedToggle).toHaveText(`Archived${pages.length + 1}`)
+  await expect(navigation.locator(`[data-group="${groupName('105')}"]`)).toHaveCount(0)
+  await expect(pageLink(navigation, pageSlug('106', 2))).toHaveCount(0)
+  await archivedToggle.click()
+  const archivedGroup = navigation.locator(`[data-archived-group="${groupName('105')}"]`)
+  await expect(archivedGroup).toBeVisible()
+  await expect(navigation.getByRole('link', { name: `P1 · 스틸 ${groupName('106')}`, exact: true })).toBeVisible()
+  await archivedGroup.getByRole('button', { name: groupButton('105') }).click({ button: 'right' })
   await page.waitForTimeout(300)
   await expect(page.getByRole('menu')).toHaveCount(0)
 })
@@ -703,6 +823,46 @@ test('the group order API keeps only the current groups of the project', async (
     expect((await page.request.post('/api/order/groups', { data: { slug: 'moa-design' } })).status()).toBe(400)
   } finally {
     fs.writeFileSync(registryFile, registryBefore)
+  }
+})
+
+test('the archive API keeps the archived pages and groups of a project in the registry', async ({ page, browser, baseURL }) => {
+  await login(page)
+  const registryFile = path.join(reviewRoot, 'registry.json')
+  const registryBefore = fs.readFileSync(registryFile)
+  const archivedOf = async (request = page.request) => (await (await request.get('/api/projects')).json()).projects.find(entry => entry.slug === 'moa-design').archived
+  const archive = (data, request = page.request) => request.post('/api/archive', { data })
+  const member = await browser.newContext({ baseURL })
+  try {
+    expect((await archive({ slug: 'moa-design', doc: 'note-2', archived: true })).ok()).toBeTruthy()
+    expect((await archive({ slug: 'moa-design', group: '검수', archived: true })).ok()).toBeTruthy()
+    expect((await archive({ slug: 'moa-design', doc: 'note-2', archived: true })).ok()).toBeTruthy()
+    expect(await archivedOf()).toEqual({ groups: ['검수'], docs: ['note-2'] })
+    expect(JSON.parse(fs.readFileSync(registryFile, 'utf8')).archived).toEqual({ 'moa-design': { groups: ['검수'], docs: ['note-2'] } })
+
+    // An invited reader sees what is archived and cannot change it.
+    const memberPage = await member.newPage()
+    await login(memberPage, 'member@moa.example')
+    expect(await archivedOf(memberPage.request)).toEqual({ groups: ['검수'], docs: ['note-2'] })
+    expect([401, 403]).toContain((await archive({ slug: 'moa-design', doc: 'overview', archived: true }, memberPage.request)).status())
+
+    expect((await archive({ slug: 'moa-design', doc: 'no-such-page', archived: true })).status()).toBe(404)
+    expect((await archive({ slug: 'moa-design', group: '없는 그룹', archived: true })).status()).toBe(404)
+    expect((await archive({ slug: 'no-such-project', doc: 'note-2', archived: true })).status()).toBe(404)
+    expect((await archive({ slug: 'moa-design', doc: 'note-2' })).status()).toBe(400)
+    expect((await archive({ slug: 'moa-design', doc: 'note-2', group: '검수', archived: true })).status()).toBe(400)
+    expect((await archive({ slug: 'moa-design', group: '', archived: true })).status()).toBe(400)
+    expect(await archivedOf()).toEqual({ groups: ['검수'], docs: ['note-2'] })
+
+    // Bringing everything back, even what was never archived, empties the entry.
+    expect((await archive({ slug: 'moa-design', doc: 'note-2', archived: false })).ok()).toBeTruthy()
+    expect((await archive({ slug: 'moa-design', group: '검수', archived: false })).ok()).toBeTruthy()
+    expect((await archive({ slug: 'moa-design', doc: 'never-archived', archived: false })).ok()).toBeTruthy()
+    expect(await archivedOf()).toBeUndefined()
+    expect(JSON.parse(fs.readFileSync(registryFile, 'utf8'))).not.toHaveProperty('archived')
+  } finally {
+    fs.writeFileSync(registryFile, registryBefore)
+    await member.close()
   }
 })
 

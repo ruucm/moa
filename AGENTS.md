@@ -165,6 +165,23 @@ Send `title`, `group` or both; `"group": ""` takes the page out of its group.
 Sort rule (`lib/content.mjs`): `order` ascending → missing = 99 → title `localeCompare`.
 A `title` in `registry.json` overrides `_meta.json`.
 
+### Archived pages and groups
+
+An admin archives a page from its menu (Archive), or a whole group from the menu of the group's heading (a right
+click, a long press, or Shift+F10). Archived pages and groups leave the list for an Archived group at its end,
+closed until opened, where every reader finds them — a page with the name of its group beside it, a group with its
+pages. The files are untouched: the pages still open, search and share. Unarchive (or Unarchive group) brings them
+back. Saved under `registry.archived[slug]` as `{ groups: [...], docs: [...] }`, by group name and file name like
+the group order and the pins, so a page written later into an archived group is archived with it. A pinned page
+that is archived leaves the Pinned group until it is back.
+
+```bash
+curl -s -b /tmp/moa.jar -X POST http://localhost:5001/api/archive \
+  -H 'Content-Type: application/json' -d '{"slug":"my-project","group":"2025 episodes","archived":true}'
+```
+
+Send `doc` or `group` with `archived` true or false.
+
 ### Title and description
 
 Edit what the hub shows for a project from its card's `···` menu ("Edit details"), or via API:

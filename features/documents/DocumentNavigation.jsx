@@ -57,6 +57,20 @@ const updatedAt = (entry) => entry.mtime || Date.parse(entry.date || '') || 0
 
 // The Pinned group opens and closes with the others, under a name no document group can have.
 const PINNED = '\u0000pinned'
+// The Archived group closes the list and starts closed: for it the set holds the opposite, its name while it is open.
+const ARCHIVED = '\u0000archived'
+
+// Pages gathered by group, in the order they come.
+function groupPages(items) {
+  const result = []
+  for (const entry of items) {
+    const name = entry.group || ''
+    let group = result.find((item) => item.name === name)
+    if (!group) result.push((group = { name, items: [] }))
+    group.items.push(entry)
+  }
+  return result
+}
 
 // Groups follow the order an admin dragged into place (`saved`): saved groups first, as saved, then
 // the rest by their order meta, with documents outside any group on top. The sort menu never moves them.
@@ -89,6 +103,9 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
   // Renames and moves not saved yet, as { slug, title } or { slug, group }, the latest last. They show at once too.
   const [pendingPages, setPendingPages] = useState([])
   const pageSaves = useRef(Promise.resolve())
+  // Pages and groups archived or brought back, not saved yet, as { doc | group, archived }, the latest last.
+  const [pendingArchive, setPendingArchive] = useState([])
+  const archiveSaves = useRef(Promise.resolve())
   // The page being dragged to another group, and the group it would join.
   const [draggedPage, setDraggedPage] = useState(null)
   const [pageTarget, setPageTarget] = useState(null)
@@ -110,21 +127,36 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
   const movedGroup = useRef(null)
   const id = useId()
   const savedOrder = project.groupOrder
-  const docs = useMemo(() => pendingPages.length
+  const allDocs = useMemo(() => pendingPages.length
     ? project.docs.map((entry) => pendingPages.reduce((page, { slug, ...change }) => slug === entry.slug ? { ...page, ...change } : page, entry))
     : project.docs, [project.docs, pendingPages])
+  // The groups and pages an admin archived (`project.archived`, as they will be once pending changes are saved):
+  // out of the list, in the Archived group at its end.
+  const archivedGroups = useMemo(() => {
+    const names = new Set(project.archived?.groups || [])
+    for (const change of pendingArchive) if (change.group) change.archived ? names.add(change.group) : names.delete(change.group)
+    return names
+  }, [project.archived, pendingArchive])
+  const archivedDocs = useMemo(() => {
+    const slugs = new Set(project.archived?.docs || [])
+    for (const change of pendingArchive) if (change.doc) change.archived ? slugs.add(change.doc) : slugs.delete(change.doc)
+    return slugs
+  }, [project.archived, pendingArchive])
+  const inArchivedGroup = (entry) => archivedGroups.has(entry.group || '')
+  const docs = useMemo(() => allDocs.filter((entry) => !archivedDocs.has(entry.slug) && !archivedGroups.has(entry.group || '')), [allDocs, archivedDocs, archivedGroups])
   const groups = useMemo(() => {
-    const result = []
-    for (const entry of docs) {
-      const name = entry.group || ''
-      let group = result.find((item) => item.name === name)
-      if (!group) result.push((group = { name, items: [] }))
-      group.items.push(entry)
-    }
     // A moved group shows in its new place at once, while the order is being saved.
     const order = pendingOrder || (Array.isArray(savedOrder) ? savedOrder : [])
-    return arrangeGroups(result, order).map((group) => ({ ...group, items: sortPages(group.items, sort) }))
+    return arrangeGroups(groupPages(docs), order).map((group) => ({ ...group, items: sortPages(group.items, sort) }))
   }, [docs, savedOrder, pendingOrder, sort])
+  // In the Archived group: pages archived on their own (the name of their group beside them), then whole groups.
+  const archivedPages = useMemo(() => sortPages(allDocs.filter((entry) => archivedDocs.has(entry.slug) && !archivedGroups.has(entry.group || '')), sort), [allDocs, archivedDocs, archivedGroups, sort])
+  const archivedList = useMemo(() => {
+    const order = Array.isArray(savedOrder) ? savedOrder : []
+    return arrangeGroups(groupPages(allDocs.filter((entry) => archivedGroups.has(entry.group || ''))), order).map((group) => ({ ...group, items: sortPages(group.items, sort) }))
+  }, [allDocs, archivedGroups, savedOrder, sort])
+  const archivedCount = archivedPages.length + archivedList.reduce((count, group) => count + group.items.length, 0)
+  const archivedOpen = collapsed.has(ARCHIVED)
   // The page sort only shows where some group (or the ungrouped list) has more than one page.
   const sortable = useMemo(() => {
     const counts = new Map()
@@ -237,7 +269,8 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
   // Saves the groups in their on-screen order with `name` moved to `target`, as the project's group
   // order for everyone. The move shows at once and is undone if the save fails.
   const moveGroup = async (name, target) => {
-    const names = named.map((group) => group.name)
+    // Archived groups keep their place in the saved order, after the groups on screen.
+    const names = [...named.map((group) => group.name), ...(Array.isArray(savedOrder) ? savedOrder : []).filter((group) => archivedGroups.has(group))]
     const from = names.indexOf(name)
     if (pendingOrder || from < 0 || target < 0 || target >= names.length || from === target) return
     names.splice(target, 0, names.splice(from, 1)[0])
@@ -331,14 +364,15 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
     if (text && text !== entry.title) savePage({ slug: entry.slug, title: text })
   }
 
-  // The page menu opens at the pointer, or by the link when it was opened from the keyboard.
-  const openMenu = (event, entry, index) => {
+  // The menu of a page ({ kind: 'page', entry, index }) or of a group ({ kind: 'group', name }) opens at the pointer,
+  // or by the row when it was opened from the keyboard.
+  const openMenu = (event, target) => {
     event.preventDefault?.()
-    const link = event.currentTarget
-    const rect = link.getBoundingClientRect()
+    const row = event.currentTarget
+    const rect = row.getBoundingClientRect()
     const atPointer = event.clientX || event.clientY
-    menuLink.current = link
-    setMenu({ entry, index, x: atPointer ? event.clientX : rect.left + 24, y: atPointer ? event.clientY : rect.bottom - 6 })
+    menuLink.current = row
+    setMenu({ ...target, x: atPointer ? event.clientX : rect.left + 24, y: atPointer ? event.clientY : rect.bottom - 6 })
   }
   const closeMenu = (toLink) => {
     const link = menuLink.current
@@ -358,10 +392,13 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
     const away = (event) => { if (!panel.contains(event.target)) closeMenu(false) }
     const close = () => closeMenu(false)
     document.addEventListener('pointerdown', away, true)
-    document.addEventListener('scroll', close, true)
     window.addEventListener('resize', close)
     window.addEventListener('blur', close)
+    // A scroll closes it too — once the list has settled: a group opened just before scrolls its pages into view
+    // for a moment longer.
+    const settled = setTimeout(() => document.addEventListener('scroll', close, true), 400)
     return () => {
+      clearTimeout(settled)
       document.removeEventListener('pointerdown', away, true)
       document.removeEventListener('scroll', close, true)
       window.removeEventListener('resize', close)
@@ -382,16 +419,16 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
   // On a touch screen the menu opens on a long press (half a second, without moving); the tap that ends the press
   // does not open the page.
   const stopPress = () => { clearTimeout(longPress.current?.timer); if (longPress.current?.timer) longPress.current = null }
-  const pressHandlers = (entry, index) => ({
+  const pressHandlers = (target) => ({
     onPointerDown: (event) => {
       stopPress()
       longPress.current = null
       if (event.pointerType !== 'touch' || event.button !== 0) return
-      const link = event.currentTarget
+      const row = event.currentTarget
       const { clientX, clientY } = event
       longPress.current = { x: clientX, y: clientY, timer: setTimeout(() => {
         longPress.current = { fired: true }
-        openMenu({ currentTarget: link, clientX, clientY }, entry, index)
+        openMenu({ currentTarget: row, clientX, clientY }, target)
       }, 500) }
     },
     onPointerMove: (event) => {
@@ -401,13 +438,42 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
     onPointerUp: stopPress,
     onPointerCancel: stopPress,
   })
-  const followLink = (event) => {
-    if (longPress.current?.fired) {
-      event.preventDefault()
-      longPress.current = null
-      return
+  // A click right after a long press is the press ending, not a click.
+  const afterPress = (event) => {
+    if (!longPress.current?.fired) return false
+    event.preventDefault()
+    longPress.current = null
+    return true
+  }
+  const followLink = (event) => { if (!afterPress(event)) onNavigate?.(event) }
+
+  // Archives a page or a whole group, or brings it back. The change shows at once and is saved in the registry for
+  // everyone; it is undone if the save fails. Focus follows: to the Archived group the row went into, or to the row
+  // where it is back (its group's heading while that group is closed).
+  const setArchived = (target, archived) => {
+    const change = target.kind === 'group' ? { group: target.name, archived } : { doc: target.entry.slug, archived }
+    setOrderError('')
+    flushSync(() => setPendingArchive((current) => [...current.filter((item) => item.group !== change.group || item.doc !== change.doc), change]))
+    const nav = navRef.current
+    const groupToggle = (name) => [...(nav?.querySelectorAll('[data-group]') || [])].find((element) => element.dataset.group === name)?.querySelector('button')
+    const back = target.kind === 'group' ? groupToggle(target.name) : findLink(nav, target.entry.slug, false) || groupToggle(target.entry.group || '')
+    const row = (archived ? null : back) || nav?.querySelector('[data-archived-toggle]')
+    if (row) {
+      revealInList(nav, row, true)
+      row.focus()
     }
-    onNavigate?.(event)
+    archiveSaves.current = archiveSaves.current.then(async () => {
+      try {
+        const response = await fetch('/api/archive', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ slug: project.slug, ...change }) })
+        const data = await response.json().catch(() => ({}))
+        if (!response.ok || data.error) throw new Error(data.error || 'Could not save the change.')
+        await onReorder?.()
+      } catch (error) {
+        setOrderError(error.message || 'Could not save the change. Please try again.')
+      } finally {
+        setPendingArchive((current) => current.filter((item) => item !== change))
+      }
+    })
   }
 
   const endDrag = () => { setDragging(null); setDropTarget(null); setDraggedPage(null); setPageTarget(null) }
@@ -458,57 +524,77 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
   }
   // An admin's page link: dragged onto another group, or moved with Alt and the up or down arrow, the page joins
   // that group; F2 edits its title, and a right click, a long press, or Shift+F10 opens its menu. `pinned` is the
-  // page's row in the Pinned group, which stays where it is (`index` its place there).
-  const pageHandlers = (entry, pinned, index) => editable ? {
-    ...(movable && {
-      draggable: true,
-      onDragStart: (event) => {
-        event.dataTransfer.effectAllowed = 'all'
-        setDraggedPage(entry.slug)
+  // page's row in the Pinned group, which stays where it is (`index` its place there). An archived page's row only
+  // has the menu and F2.
+  const pageHandlers = (entry, pinned, index, archived) => {
+    if (!editable) return {}
+    const target = { kind: 'page', entry, index }
+    const moves = movable && !archived
+    return {
+      ...(moves && {
+        draggable: true,
+        onDragStart: (event) => {
+          event.dataTransfer.effectAllowed = 'all'
+          setDraggedPage(entry.slug)
+        },
+        onDragEnd: endDrag,
+      }),
+      ...pressHandlers(target),
+      onContextMenu: (event) => openMenu(event, target),
+      onKeyDown: (event) => {
+        if ((event.key === 'F10' && event.shiftKey) || event.key === 'ContextMenu') {
+          event.preventDefault()
+          openMenu(event, target)
+          return
+        }
+        if (event.key === 'F2' && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
+          event.preventDefault()
+          startRename(entry, pinned)
+          return
+        }
+        if (!moves || !event.altKey || (event.key !== 'ArrowUp' && event.key !== 'ArrowDown')) return
+        event.preventDefault()
+        // A page outside any group goes down into the first one.
+        const into = named[named.findIndex((group) => group.name === (entry.group || '')) + (event.key === 'ArrowUp' ? -1 : 1)]
+        if (into) movePage(entry, into.name, { focus: true, reveal: !pinned })
       },
-      onDragEnd: endDrag,
-    }),
-    ...pressHandlers(entry, index),
-    onContextMenu: (event) => openMenu(event, entry, index),
-    onKeyDown: (event) => {
-      if ((event.key === 'F10' && event.shiftKey) || event.key === 'ContextMenu') {
+      'aria-keyshortcuts': moves ? 'Alt+ArrowUp Alt+ArrowDown F2 Shift+F10' : 'F2 Shift+F10',
+      'aria-describedby': `${id}-edit`,
+    }
+  }
+  // A group's heading: an admin drags it into another place, or moves it with Alt and the up or down arrow; a right
+  // click, a long press, or Shift+F10 opens the group's menu. An archived group's heading only has the menu.
+  const groupHandlers = (name, archived) => {
+    const orderable = reorderable && !archived
+    const target = { kind: 'group', name }
+    return {
+      ...(orderable && {
+        draggable: !pendingOrder,
+        onDragStart: (event) => {
+          event.dataTransfer.effectAllowed = 'move'
+          event.dataTransfer.setData('text/plain', name)
+          setDragging(name)
+        },
+        onDragEnd: endDrag,
+        'aria-describedby': `${id}-reorder`,
+      }),
+      ...(editable && { ...pressHandlers(target), onContextMenu: (event) => openMenu(event, target) }),
+      ...((orderable || editable) && { 'aria-keyshortcuts': [orderable && 'Alt+ArrowUp Alt+ArrowDown', editable && 'Shift+F10'].filter(Boolean).join(' ') }),
+      onKeyDown: (event) => {
+        if (editable && ((event.key === 'F10' && event.shiftKey) || event.key === 'ContextMenu')) {
+          event.preventDefault()
+          openMenu(event, target)
+          return
+        }
+        if (!orderable || !event.altKey || (event.key !== 'ArrowUp' && event.key !== 'ArrowDown')) return
         event.preventDefault()
-        openMenu(event, entry, index)
-        return
-      }
-      if (event.key === 'F2' && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
-        event.preventDefault()
-        startRename(entry, pinned)
-        return
-      }
-      if (!movable || !event.altKey || (event.key !== 'ArrowUp' && event.key !== 'ArrowDown')) return
-      event.preventDefault()
-      // A page outside any group goes down into the first one.
-      const target = named[named.findIndex((group) => group.name === (entry.group || '')) + (event.key === 'ArrowUp' ? -1 : 1)]
-      if (target) movePage(entry, target.name, { focus: true, reveal: !pinned })
-    },
-    'aria-keyshortcuts': movable ? 'Alt+ArrowUp Alt+ArrowDown F2 Shift+F10' : 'F2 Shift+F10',
-    'aria-describedby': `${id}-edit`,
-  } : {}
-  const toggleHandlers = (name) => reorderable ? {
-    draggable: !pendingOrder,
-    onDragStart: (event) => {
-      event.dataTransfer.effectAllowed = 'move'
-      event.dataTransfer.setData('text/plain', name)
-      setDragging(name)
-    },
-    onDragEnd: endDrag,
-    onKeyDown: (event) => {
-      if (!event.altKey || (event.key !== 'ArrowUp' && event.key !== 'ArrowDown')) return
-      event.preventDefault()
-      const target = named.findIndex((group) => group.name === name) + (event.key === 'ArrowUp' ? -1 : 1)
-      if (pendingOrder || target < 0 || target >= named.length) return
-      movedGroup.current = name
-      moveGroup(name, target)
-    },
-    'aria-keyshortcuts': 'Alt+ArrowUp Alt+ArrowDown',
-    'aria-describedby': `${id}-reorder`,
-  } : {}
+        const place = named.findIndex((group) => group.name === name) + (event.key === 'ArrowUp' ? -1 : 1)
+        if (pendingOrder || place < 0 || place >= named.length) return
+        movedGroup.current = name
+        moveGroup(name, place)
+      },
+    }
+  }
   // The line shows where the dragged group lands: it takes the place of the group under the pointer.
   const dropMarker = (name) => {
     if (!dragging || dragging === name || dropTarget !== name) return ''
@@ -518,10 +604,10 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
 
   // A page row: the link, and for a signed-in reader the pin at its end. In the Pinned group (`index` is the row's
   // place there) the link also names the page's own group, since pages of different groups often share a title.
-  const documentRow = (entry, index) => {
+  const documentRow = (entry, index, { archived = false, withGroup = false } = {}) => {
     const pinned = pinnedSlugs.includes(entry.slug)
     const inPinned = index !== undefined
-    const context = inPinned && entry.group
+    const context = (inPinned || withGroup) && entry.group
     if (renaming?.slug === entry.slug && renaming.pinned === inPinned) return (
       <div key={entry.slug} className={styles.documentRow}>
         <form className={styles.renameForm} onSubmit={(event) => { event.preventDefault(); endRename(entry, renameInput.current?.value, true) }}>
@@ -534,20 +620,26 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
       </div>
     )
     return (
-      <div key={entry.slug} className={`${styles.documentRow} ${authed ? styles.pinnableRow : ''} ${editable ? styles.editableRow : ''} ${pinned ? styles.pinnedRow : ''} ${draggedPage === entry.slug ? styles.draggingPage : ''} ${menu?.entry.slug === entry.slug && (menu.index !== undefined) === inPinned ? styles.menuRow : ''}`}>
+      <div key={entry.slug} className={`${styles.documentRow} ${authed && !archived ? styles.pinnableRow : ''} ${editable ? styles.editableRow : ''} ${pinned ? styles.pinnedRow : ''} ${archived ? styles.archivedRow : ''} ${draggedPage === entry.slug ? styles.draggingPage : ''} ${menu?.kind === 'page' && menu.entry.slug === entry.slug && (menu.index !== undefined) === inPinned ? styles.menuRow : ''}`}>
         <a href={`/p/${encodeURIComponent(project.slug)}/${encodeURIComponent(entry.slug)}`} data-doc={entry.slug}
           className={`${styles.documentLink} ${entry.slug === doc?.slug ? styles.currentDocument : ''}`}
-          aria-current={entry.slug === doc?.slug ? 'page' : undefined} onClick={followLink} {...pageHandlers(entry, inPinned, index)}>
+          aria-current={entry.slug === doc?.slug ? 'page' : undefined} onClick={followLink} {...pageHandlers(entry, inPinned, index, archived)}>
           <Icon name="file" size={16} />
           <span className={styles.documentLabel}>{entry.title}{context && <>{' '}<small className={styles.documentContext} title={entry.group}>{entry.group}</small></>}</span>
         </a>
-        {authed && <button className={styles.documentPin} onClick={(event) => togglePin(event, entry, index)}
+        {authed && !archived && <button className={styles.documentPin} onClick={(event) => togglePin(event, entry, index)}
           aria-label={`${pinned ? 'Unpin' : 'Pin'} ${entry.title}`} title={pinned ? 'Unpin' : 'Pin to the top'}>
           <Icon name="pin" size={14} />
         </button>}
       </div>
     )
   }
+
+  // What the open menu's archive item acts on: the group (a group's menu, or a page inside an archived group), or
+  // the page itself.
+  const archiveItem = !menu ? null : menu.kind === 'group' || inArchivedGroup(menu.entry)
+    ? ((name) => ({ target: { kind: 'group', name }, archived: archivedGroups.has(name), label: archivedGroups.has(name) ? 'Unarchive group' : 'Archive group' }))(menu.kind === 'group' ? menu.name : menu.entry.group)
+    : { target: { kind: 'page', entry: menu.entry }, archived: archivedDocs.has(menu.entry.slug), label: archivedDocs.has(menu.entry.slug) ? 'Unarchive' : 'Archive' }
 
   return (
     <div className={`${styles.navigation} ${mobile ? styles.mobileNavigation : ''}`}>
@@ -591,7 +683,7 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
         </div>}
       </div>
       {reorderable && <p id={`${id}-reorder`} className={styles.visuallyHidden}>Drag a group, or press Alt with the up or down arrow, to change the group order for everyone.</p>}
-      {editable && <p id={`${id}-edit`} className={styles.visuallyHidden}>{movable ? 'Drag a page onto another group, or press Alt with the up or down arrow, to move it there. ' : ''}Press F2 to rename a page, or Shift+F10 for its menu.</p>}
+      {editable && <p id={`${id}-edit`} className={styles.visuallyHidden}>{movable ? 'Drag a page onto another group, or press Alt with the up or down arrow, to move it there. ' : ''}Press F2 to rename a page, or Shift+F10 for its menu, which also archives it. Shift+F10 on a group opens the group's menu.</p>}
       {orderError && <p className={styles.navigationError} role="alert">{orderError}</p>}
       <nav className={styles.documentNavigation} ref={navRef} aria-label="Project documents" {...listDragHandlers}>
         {groups.length === 0 && <p className={styles.navigationEmpty}>No documents yet.</p>}
@@ -607,7 +699,7 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
         </div>}
         {groups.map((group, index) => group.name === '' ? group.items.map((entry) => documentRow(entry)) : (
           <div className={`${styles.documentGroup} ${dragging === group.name ? styles.draggingGroup : ''} ${dropMarker(group.name)} ${pageTarget === group.name ? styles.dropInto : ''}`} key={group.name} data-group={group.name}>
-            <button className={styles.groupToggle} onClick={(event) => toggleGroup(event, group.name)} {...toggleHandlers(group.name)}
+            <button className={`${styles.groupToggle} ${menu?.kind === 'group' && menu.name === group.name ? styles.menuGroup : ''}`} onClick={(event) => { if (!afterPress(event)) toggleGroup(event, group.name) }} {...groupHandlers(group.name, false)}
               aria-expanded={!collapsed.has(group.name)} aria-controls={`${id}-group-${index}`}>
               <span className={`${styles.groupCaret} ${!collapsed.has(group.name) ? styles.groupExpanded : ''}`}><Icon name="chevronRight" size={14} /></span>
               <span className={styles.groupName}>{group.name}</span>
@@ -618,14 +710,38 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
             </div>}
           </div>
         ))}
+        {archivedCount > 0 && <div className={`${styles.documentGroup} ${styles.archivedGroup}`}>
+          <button className={styles.groupToggle} data-archived-toggle="" onClick={(event) => { if (!archivedOpen) openedGroup.current = event.currentTarget.parentElement; onToggle(ARCHIVED) }}
+            aria-expanded={archivedOpen} aria-controls={`${id}-archived`}>
+            <span className={`${styles.groupCaret} ${archivedOpen ? styles.groupExpanded : ''}`}><Icon name="chevronRight" size={14} /></span>
+            <span className={styles.groupName}>Archived</span>
+            <span className={styles.groupCount}>{archivedCount}</span>
+          </button>
+          {archivedOpen && <div id={`${id}-archived`} className={styles.groupItems}>
+            {archivedPages.map((entry) => documentRow(entry, undefined, { archived: true, withGroup: true }))}
+            {archivedList.map((group, index) => (
+              <div className={`${styles.documentGroup} ${styles.archivedSubgroup}`} key={group.name} data-archived-group={group.name}>
+                <button className={`${styles.groupToggle} ${menu?.kind === 'group' && menu.name === group.name ? styles.menuGroup : ''}`} onClick={(event) => { if (!afterPress(event)) toggleGroup(event, group.name) }} {...groupHandlers(group.name, true)}
+                  aria-expanded={!collapsed.has(group.name)} aria-controls={`${id}-archived-${index}`}>
+                  <span className={`${styles.groupCaret} ${!collapsed.has(group.name) ? styles.groupExpanded : ''}`}><Icon name="chevronRight" size={14} /></span>
+                  <span className={styles.groupName}>{group.name}</span>
+                  <span className={styles.groupCount}>{group.items.length}</span>
+                </button>
+                {!collapsed.has(group.name) && <div id={`${id}-archived-${index}`} className={styles.groupItems}>
+                  {group.items.map((entry) => documentRow(entry, undefined, { archived: true }))}
+                </div>}
+              </div>
+            ))}
+          </div>}
+        </div>}
       </nav>
       {menu && createPortal(
-        <div ref={menuRef} className={styles.pageMenu} role="menu" aria-label={menu.entry.title} onKeyDown={menuKeys}>
-          <button type="button" role="menuitem" className={styles.pageMenuItem}
+        <div ref={menuRef} className={styles.pageMenu} role="menu" aria-label={menu.kind === 'group' ? menu.name : menu.entry.title} onKeyDown={menuKeys}>
+          {menu.kind === 'page' && <button type="button" role="menuitem" className={styles.pageMenuItem}
             onClick={() => { const { entry, index } = menu; closeMenu(false); startRename(entry, index !== undefined) }}>
             <Icon name="edit" size={14} /><span>Rename</span><kbd className={styles.pageMenuKey} aria-hidden="true">F2</kbd>
-          </button>
-          <button type="button" role="menuitem" className={styles.pageMenuItem}
+          </button>}
+          {menu.kind === 'page' && !archivedDocs.has(menu.entry.slug) && !inArchivedGroup(menu.entry) && <button type="button" role="menuitem" className={styles.pageMenuItem}
             onClick={() => {
               const { entry, index } = menu
               closeMenu(false)
@@ -633,6 +749,10 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
               ;(findLink(navRef.current, entry.slug, index !== undefined) || findLink(navRef.current, entry.slug, false))?.focus()
             }}>
             <Icon name="pin" size={14} /><span>{pinnedSlugs.includes(menu.entry.slug) ? 'Unpin' : 'Pin to the top'}</span>
+          </button>}
+          <button type="button" role="menuitem" className={styles.pageMenuItem}
+            onClick={() => { closeMenu(false); setArchived(archiveItem.target, !archiveItem.archived) }}>
+            <Icon name="archive" size={14} /><span>{archiveItem.label}</span>
           </button>
         </div>,
         navRef.current?.closest('[role="dialog"]') || document.body)}
