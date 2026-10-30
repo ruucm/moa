@@ -30,7 +30,7 @@ npm run add-user -- <email> <name> <pw> admin   # add an account directly (users
 
 - **Roles**: `member` sees only invited projects (the account's `projects` array), with live
   updates. `admin` sees everything. Admin-only APIs
-  (`/api/chat`·`trigger`·`add`·`remove`·`browse`·`order*`·`hide`·`projects/update`·`share*`·`session*`·`users*`·`claude`)
+  (`/api/chat`·`trigger`·`add`·`remove`·`browse`·`order*`·`hide`·`projects/update`·`doc/update`·`share*`·`session*`·`users*`·`claude`)
   are double-guarded: middleware path blocking + route guards (`guardAdmin` in `lib/api.mjs`).
   `/api/projects`·`/api/doc`·`/api/watch` filter by the member's `projects`.
   (Note: `public/` media is reachable by any logged-in member who guesses the path.)
@@ -143,6 +143,24 @@ curl -s -b /tmp/moa.jar -X POST http://localhost:5001/api/pin \
   -H 'Content-Type: application/json' -d '{"slug":"my-project","doc":"weekly-report","pinned":true}'
 ```
 
+### Renaming pages and moving them to another group
+
+An admin renames a page with the pencil beside its pin (or F2 on its link): Enter or leaving the field saves,
+Esc keeps the old title. A page dragged onto another group moves into it (or Alt+↑/↓ on its link, one group up or
+down); a closed group opens to show it arrive. Both are saved at once in the page's `.mdx` — its `export const title`
+or `group` literal is rewritten where it stands (a missing group goes on the line after the title) and the rest of the
+file is kept byte for byte — so every open reader sees the change through the usual live reload. The text is kept on
+one line, at most 200 characters, without a backslash, between quotes it doesn't contain (`'` or `"`; a backtick only
+for text with both). A page that sets its title or group in code, and a demo project, can't be changed this way.
+A tool that regenerates a page writes its own title and group back.
+
+```bash
+curl -s -b /tmp/moa.jar -X POST http://localhost:5001/api/doc/update \
+  -H 'Content-Type: application/json' -d '{"slug":"my-project","doc":"weekly-report","title":"Week 12","group":"Reports"}'
+```
+
+Send `title`, `group` or both; `"group": ""` takes the page out of its group.
+
 Sort rule (`lib/content.mjs`): `order` ascending → missing = 99 → title `localeCompare`.
 A `title` in `registry.json` overrides `_meta.json`.
 
@@ -223,7 +241,8 @@ text is read once and kept in memory until the file changes (`lib/search.mjs`).
 2. **Report**: `projects/<slug>/<doc>.mdx` — saving the file refreshes open browsers within
    seconds (SSE watch), no restart.
    - Top-of-file meta: `export const title / group / order / date` (`YYYY-MM-DD`) —
-     **literals only** (the sidebar index parses them with a regex)
+     **literals only** (the sidebar index parses them with a regex). An admin's rename or move in the sidebar
+     rewrites the `title` / `group` literal in the file, so read a page again before rewriting it
    - Sidebar groups by `group`, sorts by `order` ascending — after any groups an admin dragged
      into place ("Sidebar group order" above), and below the reader's own Pinned group ("Pinned
      pages" above). Readers can sort the pages inside each group by

@@ -15,8 +15,9 @@ const lastPageSlug = `mock-episode-${lastEpisode}-p${pages.length - 1}`
 
 // `episodes` is the default (order-meta) sequence; `updated` gives a group's newest file time, and
 // `age(p)` how much older than that its p-th page is. `titles` are the pages of every group.
-// `saved.groups` and `saved.pins` stand for the group order and the pinned pages stored for the project; the
-// index reads them on every request. `member` opens the project as an invited reader, not an admin.
+// `saved.groups` and `saved.pins` stand for the group order and the pinned pages stored for the project, and
+// `saved.docs` for titles and groups saved in the pages' files ({ [slug]: { title?, group? } }); the index reads
+// them on every request. `member` opens the project as an invited reader, not an admin.
 const openLongProject = async (page, { episodes = sequential, expanded = [], updated = {}, doc = 'overview', saved = {}, titles = pages, age = p => p * 1000, member = false } = {}) => {
   await login(page)
   await page.route('**/api/claude', route => route.fulfill({ json: { 'moa-design': { skills: [], agents: [] } } }))
@@ -27,7 +28,7 @@ const openLongProject = async (page, { episodes = sequential, expanded = [], upd
   const docs = [{ ...overview, group: '' }, ...episodes.flatMap((number, g) => titles.map((title, p) => ({
     slug: `mock-episode-${number}-p${p}`, title, group: groupName(number), order: g * 20 + p, mtime: updated[number] ? updated[number] - age(p) : null,
   })))]
-  await page.route('**/api/projects', route => route.fulfill({ json: { ...index, owner: !member, member, projects: index.projects.map(entry => entry.slug === 'moa-design' ? { ...entry, docs, groupOrder: saved.groups, pins: saved.pins } : entry) } }))
+  await page.route('**/api/projects', route => route.fulfill({ json: { ...index, owner: !member, member, projects: index.projects.map(entry => entry.slug === 'moa-design' ? { ...entry, docs: docs.map(doc => ({ ...doc, ...saved.docs?.[doc.slug] })), groupOrder: saved.groups, pins: saved.pins } : entry) } }))
   const collapsed = episodes.filter(number => !expanded.includes(number)).map(groupName)
   // Set once per test, so a reload keeps what the reader opened or closed since.
   await page.addInitScript(names => { if (localStorage.getItem('hub.collapsed.moa-design') === null) localStorage.setItem('hub.collapsed.moa-design', JSON.stringify(names)) }, collapsed)
@@ -368,7 +369,7 @@ test('an invited reader pins pages for themselves too', async ({ page }) => {
   expect(posts).toEqual([{ slug: 'moa-design', doc: pageSlug('106', 8), pinned: true }])
 })
 
-test('on a touch screen every pin stays in view as a full-size target', async ({ browser, baseURL }) => {
+test('on a touch screen every pin, and an admin\'s pencil, stays in view as a full-size target', async ({ browser, baseURL }) => {
   const context = await browser.newContext({ baseURL, hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } })
   const page = await context.newPage()
   try {
@@ -379,14 +380,241 @@ test('on a touch screen every pin stays in view as a full-size target', async ({
     await page.getByRole('button', { name: 'Open document navigation' }).tap()
     const navigation = page.getByRole('dialog').getByRole('navigation', { name: 'Project documents', exact: true })
     const pin = navigation.getByRole('button', { name: 'Pin P1 · 스틸', exact: true })
+    const pencil = navigation.getByRole('button', { name: 'Rename P1 · 스틸', exact: true })
     await expect(pin).toHaveCSS('opacity', '1')
-    const [button, label] = await Promise.all([rect(pin), rect(navigation.getByRole('link', { name: 'P1 · 스틸', exact: true }).locator('span'))])
-    expect(Math.min(button.width, button.height)).toBeGreaterThanOrEqual(44)
-    expect(label.right).toBeLessThanOrEqual(button.left)
+    await expect(pencil).toHaveCSS('opacity', '1')
+    const [button, edit, label] = await Promise.all([rect(pin), rect(pencil), rect(navigation.getByRole('link', { name: 'P1 · 스틸', exact: true }).locator('span'))])
+    expect(Math.round(Math.min(button.width, button.height, edit.width, edit.height))).toBeGreaterThanOrEqual(44)
+    expect(label.right).toBeLessThanOrEqual(edit.left + 0.5)
+    expect(edit.right).toBeLessThanOrEqual(button.left + 0.5)
     await pin.tap()
     await expect.poll(() => pinnedTitles(navigation)).toEqual(['P1 · 스틸'])
   } finally {
     await context.close()
+  }
+})
+
+// An admin drags a page onto another group, or moves it a group up or down with Alt+arrow keys, and edits its title
+// with the pencil beside the pin or F2. Each change is saved in the page's file (mocked here) and shows at once.
+const mockPageSaves = async (page, saved, posts, respond = () => ({ json: { ok: true } })) => {
+  await page.route('**/api/doc/update', async route => {
+    const body = route.request().postDataJSON()
+    posts.push(body)
+    const reply = await respond(body)
+    if (!reply.status) {
+      const { slug, doc, ...change } = body
+      saved.docs = { ...saved.docs, [doc]: { ...saved.docs?.[doc], ...change } }
+    }
+    return route.fulfill(reply)
+  })
+}
+// The groups a page is listed in, outside the Pinned group (none while its group is closed).
+const groupsOf = (navigation, slug) => navigation.evaluate((nav, slug) => [...nav.querySelectorAll('a[data-doc]')]
+  .filter(link => link.dataset.doc === slug && link.closest('[data-group]'))
+  .map(link => link.closest('[data-group]').dataset.group), slug)
+const pageLink = (navigation, slug) => navigation.locator(`[data-group] a[data-doc="${slug}"]`)
+
+test('dragging a page onto another group moves it there and saves its group', async ({ page }) => {
+  const saved = {}
+  const posts = []
+  await mockPageSaves(page, saved, posts)
+  const navigation = await openLongProject(page, { episodes: ['105', '106', '100'], expanded: ['106'], saved })
+  const toggle = number => navigation.getByRole('button', { name: groupButton(number) })
+  const still = pageSlug('106', 2)
+  await expect(pageLink(navigation, still)).toHaveAttribute('draggable', 'true')
+
+  // Dropped on a closed group, the page joins it and the group opens to show it there.
+  await pageLink(navigation, still).dragTo(toggle('105'))
+  await expect(toggle('105')).toHaveAttribute('aria-expanded', 'true')
+  await expect.poll(() => groupsOf(navigation, still)).toEqual([groupName('105')])
+  await expect(toggle('105')).toHaveText(`${groupName('105')}${pages.length + 1}`)
+  await expect(toggle('106')).toHaveText(`${groupName('106')}${pages.length - 1}`)
+  await expect.poll(() => posts).toEqual([{ slug: 'moa-design', doc: still, group: groupName('105') }])
+  await page.reload()
+  await expect.poll(() => groupsOf(navigation, still)).toEqual([groupName('105')])
+
+  // Dropped on the group it is in, or outside any group, it stays where it is.
+  await pageLink(navigation, still).dragTo(toggle('105'))
+  await pageLink(navigation, pageSlug('106', 0)).dragTo(navigation.getByRole('link', { name: '더 명확하게, 더 편안하게', exact: true }))
+  await page.waitForTimeout(300)
+  expect(posts).toHaveLength(1)
+  expect(await groupsOf(navigation, pageSlug('106', 0))).toEqual([groupName('106')])
+
+  // A page in the Pinned group can be dragged too; it stays pinned, under its new group's name.
+  saved.pins = [pageSlug('106', 3)]
+  await page.reload()
+  const pinned = pinnedGroup(navigation).locator('a').first()
+  await pinned.dragTo(toggle('105'))
+  await expect.poll(() => groupsOf(navigation, pageSlug('106', 3))).toEqual([groupName('105')])
+  await expect(pinned).toHaveText(`P2 · 파일럿 ${groupName('105')}`)
+  await expect.poll(() => posts.at(-1)).toEqual({ slug: 'moa-design', doc: pageSlug('106', 3), group: groupName('105') })
+
+  // A failed save puts the page back and says why. (105 closes first, so both ends of the drag fit in the list.)
+  await page.unroute('**/api/doc/update')
+  await mockPageSaves(page, saved, posts, () => ({ status: 500, json: { error: '검수용 저장 실패' } }))
+  await toggle('105').click()
+  await expect(toggle('105')).toHaveAttribute('aria-expanded', 'false')
+  await pageLink(navigation, pageSlug('106', 5)).dragTo(toggle('105'))
+  await expect(page.getByRole('alert').filter({ hasText: '검수용 저장 실패' })).toBeVisible()
+  await expect.poll(() => groupsOf(navigation, pageSlug('106', 5))).toEqual([groupName('106')])
+})
+
+test('a page moves a group up or down and is renamed from the keyboard, keeping focus', async ({ page }) => {
+  const saved = {}
+  const posts = []
+  await mockPageSaves(page, saved, posts)
+  const navigation = await openLongProject(page, { episodes: ['105', '106', '100'], expanded: ['105', '106'], saved })
+  const pilot = pageSlug('106', 3)
+
+  // Alt+Down moves it into the next group, which opens; focus goes along.
+  await pageLink(navigation, pilot).focus()
+  await page.keyboard.press('Alt+ArrowDown')
+  await expect.poll(() => groupsOf(navigation, pilot)).toEqual([groupName('100')])
+  await expect(pageLink(navigation, pilot)).toBeFocused()
+  await page.keyboard.press('Alt+ArrowUp')
+  await expect.poll(() => groupsOf(navigation, pilot)).toEqual([groupName('106')])
+  await expect(pageLink(navigation, pilot)).toBeFocused()
+  await expect.poll(() => posts).toEqual([groupName('100'), groupName('106')].map(group => ({ slug: 'moa-design', doc: pilot, group })))
+  // There is no group above the first one.
+  await pageLink(navigation, pageSlug('105', 0)).focus()
+  await page.keyboard.press('Alt+ArrowUp')
+  await page.waitForTimeout(300)
+  expect(posts).toHaveLength(2)
+
+  // F2 opens the title for editing; Enter saves it and gives focus back to the page.
+  await pageLink(navigation, pilot).focus()
+  await page.keyboard.press('F2')
+  const field = navigation.getByRole('textbox', { name: 'Title of P2 · 파일럿', exact: true })
+  await expect(field).toBeFocused()
+  await expect(field).toHaveValue('P2 · 파일럿')
+  await page.keyboard.type('P2 · 파일럿   (2차) ')
+  await page.keyboard.press('Enter')
+  await expect(pageLink(navigation, pilot)).toHaveText('P2 · 파일럿 (2차)')
+  await expect(pageLink(navigation, pilot)).toBeFocused()
+  await expect.poll(() => posts.at(-1)).toEqual({ slug: 'moa-design', doc: pilot, title: 'P2 · 파일럿 (2차)' })
+
+  // Escape keeps the title as it was.
+  await page.keyboard.press('F2')
+  await page.keyboard.type('버릴 제목')
+  await page.keyboard.press('Escape')
+  await expect(pageLink(navigation, pilot)).toHaveText('P2 · 파일럿 (2차)')
+  await expect(pageLink(navigation, pilot)).toBeFocused()
+  await page.waitForTimeout(300)
+  expect(posts).toHaveLength(3)
+})
+
+test('the pencil beside the pin renames a page, and a failed save puts the old title back', async ({ page }) => {
+  const saved = {}
+  const posts = []
+  await mockPageSaves(page, saved, posts)
+  const navigation = await openLongProject(page, { episodes: ['105', '106'], expanded: ['106'], saved })
+  const episode = navigation.locator(`[data-group="${groupName('106')}"]`)
+  const pencil = episode.getByRole('button', { name: 'Rename P1 · 스틸', exact: true })
+  await expect(pencil).toHaveCSS('opacity', '0')
+  await episode.getByRole('link', { name: 'P1 · 스틸', exact: true }).hover()
+  await expect(pencil).toHaveCSS('opacity', '1')
+  await pencil.click()
+  const field = episode.getByRole('textbox', { name: 'Title of P1 · 스틸', exact: true })
+  await expect(field).toBeFocused()
+  await field.fill('스틸 컷 · 확정')
+  // Leaving the field saves it.
+  await page.mouse.click(900, 600)
+  await expect(episode.getByRole('link', { name: '스틸 컷 · 확정', exact: true })).toBeVisible()
+  await expect(field).toHaveCount(0)
+  await expect.poll(() => posts).toEqual([{ slug: 'moa-design', doc: pageSlug('106', 2), title: '스틸 컷 · 확정' }])
+  await page.reload()
+  await expect(episode.getByRole('link', { name: '스틸 컷 · 확정', exact: true })).toBeVisible()
+
+  // A title left as it was, or emptied, saves nothing.
+  for (const value of [null, '   ']) {
+    await episode.getByRole('link', { name: '스틸 컷 · 확정', exact: true }).hover()
+    await episode.getByRole('button', { name: 'Rename 스틸 컷 · 확정', exact: true }).click()
+    if (value !== null) await episode.getByRole('textbox').fill(value)
+    await page.keyboard.press('Enter')
+    await expect(episode.getByRole('link', { name: '스틸 컷 · 확정', exact: true })).toBeVisible()
+  }
+  await page.waitForTimeout(300)
+  expect(posts).toHaveLength(1)
+
+  await page.unroute('**/api/doc/update')
+  await mockPageSaves(page, saved, posts, () => ({ status: 500, json: { error: '검수용 저장 실패' } }))
+  await episode.getByRole('link', { name: 'P2 · 파일럿', exact: true }).hover()
+  await episode.getByRole('button', { name: 'Rename P2 · 파일럿', exact: true }).click()
+  await episode.getByRole('textbox').fill('저장 안 될 제목')
+  await page.keyboard.press('Enter')
+  await expect(page.getByRole('alert').filter({ hasText: '검수용 저장 실패' })).toBeVisible()
+  await expect(episode.getByRole('link', { name: 'P2 · 파일럿', exact: true })).toBeVisible()
+  await expect(episode.getByRole('link', { name: '저장 안 될 제목', exact: true })).toHaveCount(0)
+})
+
+test('an invited reader cannot rename or move pages', async ({ page }) => {
+  const navigation = await openLongProject(page, { episodes: ['105', '106'], expanded: ['106'], member: true })
+  const link = pageLink(navigation, pageSlug('106', 2))
+  await link.hover()
+  await expect(navigation.getByRole('button', { name: /^Rename / })).toHaveCount(0)
+  await expect(link).not.toHaveAttribute('draggable', 'true')
+  await link.focus()
+  await page.keyboard.press('F2')
+  await expect(navigation.getByRole('textbox')).toHaveCount(0)
+})
+
+test('the page API rewrites only the title or group literal of the file', async ({ page, browser, baseURL }) => {
+  await login(page)
+  const file = path.join(reviewRoot, 'projects', 'moa-design', 'note-2.mdx')
+  const loose = path.join(reviewRoot, 'projects', 'guide', 'runtime-error.mdx')
+  const [before, looseBefore] = [fs.readFileSync(file, 'utf8'), fs.readFileSync(loose, 'utf8')]
+  const update = (data, request = page.request) => request.post('/api/doc/update', { data })
+  const indexed = async (slug, doc) => (await (await page.request.get('/api/projects')).json()).projects.find(entry => entry.slug === slug).docs.find(entry => entry.slug === doc)
+  const member = await browser.newContext({ baseURL })
+  const guest = await browser.newContext({ baseURL })
+  try {
+    // A move changes the group literal where it stands, nothing else.
+    let response = await update({ slug: 'moa-design', doc: 'note-2', group: '검수' })
+    expect(response.ok()).toBeTruthy()
+    expect(await response.json()).toEqual({ ok: true, doc: { slug: 'note-2', title: '관찰과 배움', group: '검수' } })
+    expect(fs.readFileSync(file, 'utf8')).toBe(before.replace("export const group = '작업 기록'", "export const group = '검수'"))
+    expect(await indexed('moa-design', 'note-2')).toMatchObject({ title: '관찰과 배움', group: '검수', order: 2, date: '2026-09-02' })
+
+    // A title is kept on one line, between quotes it doesn't contain.
+    expect((await update({ slug: 'moa-design', doc: 'note-2', title: `  It's\n "done"  ` })).ok()).toBeTruthy()
+    expect(fs.readFileSync(file, 'utf8')).toContain('export const title = `It\'s "done"`')
+    expect(await indexed('moa-design', 'note-2')).toMatchObject({ title: `It's "done"`, group: '검수' })
+    // The same text again leaves the file alone.
+    const { mtimeMs } = fs.statSync(file)
+    expect((await update({ slug: 'moa-design', doc: 'note-2', title: `It's "done"`, group: '검수' })).ok()).toBeTruthy()
+    expect(fs.statSync(file).mtimeMs).toBe(mtimeMs)
+    // Back to the old title and group, the file is as it was.
+    expect((await update({ slug: 'moa-design', doc: 'note-2', title: '관찰과 배움', group: '작업 기록' })).ok()).toBeTruthy()
+    expect(fs.readFileSync(file, 'utf8')).toBe(before)
+
+    // A page without a group gets one, on the line after its title.
+    expect((await update({ slug: 'guide', doc: 'runtime-error', group: '오류 검수' })).ok()).toBeTruthy()
+    expect(fs.readFileSync(loose, 'utf8')).toBe(looseBefore.replace("export const title = '렌더 오류 검수'\n", "export const title = '렌더 오류 검수'\nexport const group = '오류 검수'\n"))
+    expect(await indexed('guide', 'runtime-error')).toMatchObject({ title: '렌더 오류 검수', group: '오류 검수', order: 98 })
+
+    for (const [data, status] of [
+      [{ slug: 'moa-design', doc: 'note-2' }, 400],
+      [{ slug: 'moa-design', doc: 'note-2', title: '  ' }, 400],
+      [{ slug: 'moa-design', doc: 'note-2', title: 'a\\b' }, 400],
+      [{ slug: 'moa-design', doc: 'note-2', group: 7 }, 400],
+      [{ slug: 'moa-design', doc: 'note-2', title: 'x'.repeat(201) }, 400],
+      [{ slug: 'moa-design', doc: 'note-2', title: '`${a}` \'b\' "c"' }, 422],
+      [{ slug: 'moa-design', doc: 'no-such-page', title: 'x' }, 404],
+      [{ slug: 'no-such-project', doc: 'note-2', title: 'x' }, 404],
+    ]) expect((await update(data)).status(), JSON.stringify(data)).toBe(status)
+    expect(fs.readFileSync(file, 'utf8')).toBe(before)
+
+    // Only an admin edits pages.
+    const memberPage = await member.newPage()
+    await login(memberPage, 'member@moa.example')
+    expect((await update({ slug: 'moa-design', doc: 'note-2', title: 'x' }, memberPage.request)).status()).toBe(403)
+    expect((await update({ slug: 'moa-design', doc: 'note-2', title: 'x' }, (await guest.newPage()).request)).status()).toBe(401)
+    expect(fs.readFileSync(file, 'utf8')).toBe(before)
+  } finally {
+    fs.writeFileSync(file, before)
+    fs.writeFileSync(loose, looseBefore)
+    await member.close()
+    await guest.close()
   }
 })
 

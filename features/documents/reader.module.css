@@ -53,6 +53,19 @@
 .documentPin:hover { color: var(--color-text-primary); }
 .pinnedRow > .documentPin { color: var(--color-accent-text); }
 .pinnedRow > .documentPin:hover { color: var(--color-accent-hover); }
+/* An admin's pencil, beside the pin, edits the page's title. It shows with the pin, over the end of the title's
+   first line, on the background the row has under the pointer. */
+.documentEdit { position: absolute; top: 6px; right: 34px; display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: var(--radius-sm); background: var(--color-surface-subtle); color: var(--color-text-muted); cursor: pointer; }
+.documentEdit:hover { color: var(--color-text-primary); }
+.documentRow:has(> .currentDocument) > .documentEdit { background: var(--color-accent-subtle); }
+/* The title field takes the row's place while it is edited. */
+.renameForm { display: flex; align-items: center; gap: var(--space-3); min-height: 44px; padding: var(--space-1) var(--space-1) var(--space-1) var(--space-3); }
+.renameForm > svg { flex-shrink: 0; color: var(--color-text-muted); }
+.renameInput { flex: 1; min-width: 0; min-height: 36px; padding: var(--space-1) var(--space-2); border: 1px solid var(--color-border-control); border-radius: var(--radius-sm); background: var(--color-surface-panel); color: var(--color-text-primary); font: inherit; font-size: var(--font-size-sm); line-height: 1.55; }
+/* A page dragged to another group, and the group it would join. */
+.draggingPage { opacity: .4; }
+.dropInto { border-radius: var(--radius-sm); background: var(--color-accent-subtle); }
+.dropInto::after { content: ''; position: absolute; inset: 0; border: 2px solid var(--color-accent-solid); border-radius: var(--radius-sm); pointer-events: none; }
 .documentGroup { position: relative; }
 .documentGroup + .documentGroup { margin-top: var(--space-4); }
 .draggingGroup { opacity: .4; }
@@ -155,12 +168,17 @@
 .chatDrawer > div { display: flex; flex: 1; min-height: 0; padding: 0; overflow: hidden; }
 
 @media (hover: hover) {
-  .documentRow:not(.pinnedRow) > .documentPin { opacity: 0; }
-  .documentRow:not(.pinnedRow):is(:hover, :has(:focus-visible)) > .documentPin { opacity: 1; }
+  .documentRow:not(.pinnedRow) > .documentPin, .documentEdit { opacity: 0; }
+  .documentRow:not(.pinnedRow):is(:hover, :has(:focus-visible)) > .documentPin, .documentRow:is(:hover, :has(:focus-visible)) > .documentEdit { opacity: 1; }
 }
 @media (hover: none) {
   .pinnableRow > .documentLink { padding-right: var(--space-12); }
   .documentPin { top: 0; right: 0; width: 44px; height: 44px; }
+  /* Both buttons stay in view, so the title keeps clear of them. Phones zoom into a field under 16px. */
+  .editableRow > .documentLink { padding-right: calc(var(--space-12) + 44px); }
+  .documentEdit { top: 0; right: 44px; width: 44px; height: 44px; background: none; }
+  .documentRow:has(> .currentDocument) > .documentEdit { background: none; }
+  .renameInput { font-size: 1rem; }
 }
 @media (min-width: 1152px) {
   .documentMain { --figure-bleed: 2rem; }

@@ -41,6 +41,9 @@ Body…
   If an admin has dragged the project's groups into an order (`registry.json` `groupOrder`), those groups
   come first and a new group follows them, by `order`. Each reader's pinned pages (`pins.json`) also show
   in their own Pinned group above all groups; a pin goes by the file name, so renaming a file unpins it
+- An admin can rename a page or move it to another group from the sidebar (the pencil, or a drag onto the group).
+  That rewrites the `title` / `group` literal in the file, so read the page again before you rewrite it — a page
+  written from a stale copy puts the old title and group back
 - `date` is `YYYY-MM-DD`. The project card's "updated" value is the latest `date` across its documents
 - The filename is the URL slug — English kebab-case recommended
 

@@ -30,6 +30,10 @@ function revealInList(nav, element, smooth = false) {
   nav.scrollTo({ top: nav.scrollTop + delta, behavior: smooth && !reduceMotion ? 'smooth' : 'auto' })
 }
 
+// A page's link in the list: in its own group, or (`pinned`) in the Pinned group.
+const findLink = (nav, slug, pinned) => [...(nav?.querySelectorAll('a[data-doc]') || [])]
+  .find((link) => link.dataset.doc === slug && !!link.closest(`.${styles.pinnedGroup}`) === pinned)
+
 const leadingNumbers = (name) => {
   const match = /^\s*(\d+(?:[.-]\d+)*)/.exec(name)
   return match ? match[1].split(/[.-]/).map(Number) : null
@@ -82,15 +86,30 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
   // Pins and unpins not saved yet, as [slug, pinned], the latest last. They show at once.
   const [pendingPins, setPendingPins] = useState([])
   const pinSaves = useRef(Promise.resolve())
+  // Renames and moves not saved yet, as { slug, title } or { slug, group }, the latest last. They show at once too.
+  const [pendingPages, setPendingPages] = useState([])
+  const pageSaves = useRef(Promise.resolve())
+  // The page being dragged to another group, and the group it would join.
+  const [draggedPage, setDraggedPage] = useState(null)
+  const [pageTarget, setPageTarget] = useState(null)
+  // The row whose title is being edited: { slug, pinned } (`pinned` for its row in the Pinned group).
+  const [renaming, setRenaming] = useState(null)
+  const renamingRef = useRef(null)
+  const renameInput = useRef(null)
+  const renamedRow = useRef(null)
+  const movedPage = useRef(null)
   const navRef = useRef(null)
   const openedGroup = useRef(null)
   const appliedSort = useRef(sort)
   const movedGroup = useRef(null)
   const id = useId()
   const savedOrder = project.groupOrder
+  const docs = useMemo(() => pendingPages.length
+    ? project.docs.map((entry) => pendingPages.reduce((page, { slug, ...change }) => slug === entry.slug ? { ...page, ...change } : page, entry))
+    : project.docs, [project.docs, pendingPages])
   const groups = useMemo(() => {
     const result = []
-    for (const entry of project.docs) {
+    for (const entry of docs) {
       const name = entry.group || ''
       let group = result.find((item) => item.name === name)
       if (!group) result.push((group = { name, items: [] }))
@@ -99,15 +118,19 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
     // A moved group shows in its new place at once, while the order is being saved.
     const order = pendingOrder || (Array.isArray(savedOrder) ? savedOrder : [])
     return arrangeGroups(result, order).map((group) => ({ ...group, items: sortPages(group.items, sort) }))
-  }, [project.docs, savedOrder, pendingOrder, sort])
+  }, [docs, savedOrder, pendingOrder, sort])
   // The page sort only shows where some group (or the ungrouped list) has more than one page.
   const sortable = useMemo(() => {
     const counts = new Map()
-    for (const entry of project.docs) counts.set(entry.group || '', (counts.get(entry.group || '') || 0) + 1)
+    for (const entry of docs) counts.set(entry.group || '', (counts.get(entry.group || '') || 0) + 1)
     return [...counts.values()].some((count) => count > 1)
-  }, [project.docs])
+  }, [docs])
   const named = groups.filter((group) => group.name !== '')
   const reorderable = owner && named.length > 1
+  // An admin renames pages and moves them into other groups (a demo project stays as it ships). A page can move
+  // once there is a group it isn't in: a second group, or one group and pages outside any.
+  const editable = owner && !project.demo
+  const movable = editable && (named.length > 1 || (named.length === 1 && groups.length > 1))
   // Pinned pages, the latest pin first, as they will be once the pending changes are saved.
   const pinnedSlugs = useMemo(() => {
     const changed = new Map(pendingPins)
@@ -117,9 +140,9 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
   // The Pinned group lists them on top of the list, sorted like the pages of any group. Each page
   // also stays in its own group.
   const pinnedPages = useMemo(() => {
-    const pages = pinnedSlugs.map((slug) => project.docs.find((entry) => entry.slug === slug)).filter(Boolean)
+    const pages = pinnedSlugs.map((slug) => docs.find((entry) => entry.slug === slug)).filter(Boolean)
     return sortPages(pages, sort)
-  }, [project.docs, pinnedSlugs, sort])
+  }, [docs, pinnedSlugs, sort])
   const pinnedOpen = !collapsed.has(PINNED)
 
   // Bring the current document into view when the reader lands on it. This must not re-run when a
@@ -155,10 +178,29 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
     if (toggle && document.activeElement !== toggle) toggle.focus()
   }, [groups])
 
-  // While a group is dragged, holding the pointer near the top or bottom edge of the list scrolls it,
-  // so a group can travel the whole list in one drag.
+  // A page moved into another group comes into view there, and focus follows it when it was moved from the
+  // keyboard: the row is drawn anew in its new group.
   useEffect(() => {
-    if (!dragging) return
+    const moved = movedPage.current
+    movedPage.current = null
+    const link = moved && findLink(navRef.current, moved.slug, false)
+    if (!link) return
+    revealInList(navRef.current, link, true)
+    if (moved.focus) link.focus()
+  }, [groups, collapsed])
+
+  // Focus goes back to a page's link once its title is no longer edited from the keyboard.
+  useEffect(() => {
+    const row = renamedRow.current
+    if (renaming || !row) return
+    renamedRow.current = null
+    findLink(navRef.current, row.slug, row.pinned)?.focus()
+  }, [renaming])
+
+  // While a group or a page is dragged, holding the pointer near the top or bottom edge of the list scrolls it,
+  // so it can travel the whole list in one drag.
+  useEffect(() => {
+    if (!dragging && !draggedPage) return
     let pointer = null
     let frame = 0
     const track = (event) => { pointer = event.clientY }
@@ -179,7 +221,7 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
       window.removeEventListener('dragover', track)
       cancelAnimationFrame(frame)
     }
-  }, [dragging])
+  }, [dragging, draggedPage])
 
   const toggleGroup = (event, name) => {
     if (collapsed.has(name)) openedGroup.current = event.currentTarget.parentElement
@@ -236,11 +278,72 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
     })
   }
 
-  const endDrag = () => { setDragging(null); setDropTarget(null) }
+  // Saves a rename or a move in the page's file, where the sidebar reads its title and group. Changes are saved one
+  // after another, in the order they were made, and each shows until it is saved — or is undone if the save fails.
+  const savePage = (change) => {
+    setOrderError('')
+    setPendingPages((current) => [...current, change])
+    pageSaves.current = pageSaves.current.then(async () => {
+      const { slug, ...fields } = change
+      try {
+        const response = await fetch('/api/doc/update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ slug: project.slug, doc: slug, ...fields }) })
+        const data = await response.json().catch(() => ({}))
+        if (!response.ok || data.error) throw new Error(data.error || 'Could not save the page.')
+        await onReorder?.()
+      } catch (error) {
+        setOrderError(error.message || 'Could not save the page. Please try again.')
+      } finally {
+        setPendingPages((current) => current.filter((item) => item !== change))
+      }
+    })
+  }
+
+  // Moves a page into the group `name`. A closed group opens, so the page is seen to arrive. `focus` takes keyboard
+  // focus along to the page's new row; `reveal: false` leaves the list where it is (a move made in the Pinned group).
+  const movePage = (entry, name, { focus = false, reveal = true } = {}) => {
+    if (!entry || !name || (entry.group || '') === name) return
+    if (collapsed.has(name)) onToggle(name)
+    if (reveal) movedPage.current = { slug: entry.slug, focus }
+    savePage({ slug: entry.slug, group: name })
+  }
+
+  const startRename = (entry, pinned) => {
+    setOrderError('')
+    renamingRef.current = { slug: entry.slug, pinned }
+    setRenaming(renamingRef.current)
+  }
+  // Enter, or leaving the field, saves a changed title; Escape keeps the old one (`title` null). A field closed from
+  // the keyboard gives focus back to the page's link. Only the first of these counts: Escape also takes the field
+  // away, which may blur it.
+  const endRename = (entry, title, fromKeyboard) => {
+    const row = renamingRef.current
+    if (row?.slug !== entry.slug) return
+    renamingRef.current = null
+    if (fromKeyboard) renamedRow.current = row
+    setRenaming(null)
+    const text = (title || '').replace(/\s+/g, ' ').trim()
+    if (text && text !== entry.title) savePage({ slug: entry.slug, title: text })
+  }
+
+  const endDrag = () => { setDragging(null); setDropTarget(null); setDraggedPage(null); setPageTarget(null) }
   const groupAt = (event) => event.target.closest?.('[data-group]')?.dataset.group
+  // A dragged page joins the group under the pointer, unless that is its own group.
+  const pageTargetAt = (event) => {
+    const name = groupAt(event)
+    const entry = docs.find((item) => item.slug === draggedPage)
+    return name && entry && (entry.group || '') !== name ? name : null
+  }
   // The whole list takes the drop, gaps between groups included: the dragged group lands in the place
-  // of the group under the pointer, or of the last one it crossed.
+  // of the group under the pointer, or of the last one it crossed. A dragged page lands only on a group.
   const dragOverList = (event) => {
+    if (draggedPage) {
+      const name = pageTargetAt(event)
+      setPageTarget(name)
+      if (!name) return
+      event.preventDefault()
+      event.dataTransfer.dropEffect = 'move'
+      return
+    }
     if (!dragging) return
     event.preventDefault()
     event.dataTransfer.dropEffect = 'move'
@@ -250,7 +353,17 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
   const listDragHandlers = {
     onDragEnter: dragOverList,
     onDragOver: dragOverList,
+    onDragLeave: (event) => { if (draggedPage && !event.currentTarget.contains(event.relatedTarget)) setPageTarget(null) },
     onDrop: (event) => {
+      if (draggedPage) {
+        const name = pageTargetAt(event)
+        if (name) {
+          event.preventDefault()
+          movePage(docs.find((item) => item.slug === draggedPage), name)
+        }
+        endDrag()
+        return
+      }
       if (!dragging) return
       event.preventDefault()
       const name = groupAt(event) || dropTarget
@@ -258,6 +371,32 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
       endDrag()
     },
   }
+  // An admin's page link: dragged onto another group, or moved with Alt and the up or down arrow, the page joins
+  // that group; F2 edits its title. `pinned` is the page's row in the Pinned group, which stays where it is.
+  const pageHandlers = (entry, pinned) => editable ? {
+    ...(movable && {
+      draggable: true,
+      onDragStart: (event) => {
+        event.dataTransfer.effectAllowed = 'all'
+        setDraggedPage(entry.slug)
+      },
+      onDragEnd: endDrag,
+    }),
+    onKeyDown: (event) => {
+      if (event.key === 'F2' && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
+        event.preventDefault()
+        startRename(entry, pinned)
+        return
+      }
+      if (!movable || !event.altKey || (event.key !== 'ArrowUp' && event.key !== 'ArrowDown')) return
+      event.preventDefault()
+      // A page outside any group goes down into the first one.
+      const target = named[named.findIndex((group) => group.name === (entry.group || '')) + (event.key === 'ArrowUp' ? -1 : 1)]
+      if (target) movePage(entry, target.name, { focus: true, reveal: !pinned })
+    },
+    'aria-keyshortcuts': movable ? 'Alt+ArrowUp Alt+ArrowDown F2' : 'F2',
+    'aria-describedby': `${id}-edit`,
+  } : {}
   const toggleHandlers = (name) => reorderable ? {
     draggable: !pendingOrder,
     onDragStart: (event) => {
@@ -284,20 +423,36 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
     return index(name) < index(dragging) ? styles.dropBefore : styles.dropAfter
   }
 
-  // A page row: the link, and for a signed-in reader the pin at its end. In the Pinned group (`index` is the row's
-  // place there) the link also names the page's own group, since pages of different groups often share
-  // a title.
+  // A page row: the link, and for a signed-in reader the pin at its end — for an admin, the pencil that edits the
+  // title beside it. In the Pinned group (`index` is the row's place there) the link also names the page's own
+  // group, since pages of different groups often share a title.
   const documentRow = (entry, index) => {
     const pinned = pinnedSlugs.includes(entry.slug)
-    const context = index !== undefined && entry.group
+    const inPinned = index !== undefined
+    const context = inPinned && entry.group
+    if (renaming?.slug === entry.slug && renaming.pinned === inPinned) return (
+      <div key={entry.slug} className={styles.documentRow}>
+        <form className={styles.renameForm} onSubmit={(event) => { event.preventDefault(); endRename(entry, renameInput.current?.value, true) }}>
+          <Icon name="file" size={16} />
+          <input ref={renameInput} className={styles.renameInput} defaultValue={entry.title} maxLength={200} autoFocus
+            aria-label={`Title of ${entry.title}`} enterKeyHint="done" onFocus={(event) => event.currentTarget.select()}
+            onKeyDown={(event) => { if (event.key === 'Escape' && !event.nativeEvent.isComposing) { event.preventDefault(); endRename(entry, null, true) } }}
+            onBlur={(event) => { if (document.hasFocus()) endRename(entry, event.currentTarget.value, false) }} />
+        </form>
+      </div>
+    )
     return (
-      <div key={entry.slug} className={`${styles.documentRow} ${authed ? styles.pinnableRow : ''} ${pinned ? styles.pinnedRow : ''}`}>
-        <a href={`/p/${encodeURIComponent(project.slug)}/${encodeURIComponent(entry.slug)}`}
+      <div key={entry.slug} className={`${styles.documentRow} ${authed ? styles.pinnableRow : ''} ${editable ? styles.editableRow : ''} ${pinned ? styles.pinnedRow : ''} ${draggedPage === entry.slug ? styles.draggingPage : ''}`}>
+        <a href={`/p/${encodeURIComponent(project.slug)}/${encodeURIComponent(entry.slug)}`} data-doc={entry.slug}
           className={`${styles.documentLink} ${entry.slug === doc?.slug ? styles.currentDocument : ''}`}
-          aria-current={entry.slug === doc?.slug ? 'page' : undefined} onClick={onNavigate}>
+          aria-current={entry.slug === doc?.slug ? 'page' : undefined} onClick={onNavigate} {...pageHandlers(entry, inPinned)}>
           <Icon name="file" size={16} />
           <span className={styles.documentLabel}>{entry.title}{context && <>{' '}<small className={styles.documentContext} title={entry.group}>{entry.group}</small></>}</span>
         </a>
+        {editable && <button className={styles.documentEdit} onClick={() => startRename(entry, inPinned)}
+          aria-label={`Rename ${entry.title}`} title="Rename">
+          <Icon name="edit" size={14} />
+        </button>}
         {authed && <button className={styles.documentPin} onClick={(event) => togglePin(event, entry, index)}
           aria-label={`${pinned ? 'Unpin' : 'Pin'} ${entry.title}`} title={pinned ? 'Unpin' : 'Pin to the top'}>
           <Icon name="pin" size={14} />
@@ -348,6 +503,7 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
         </div>}
       </div>
       {reorderable && <p id={`${id}-reorder`} className={styles.visuallyHidden}>Drag a group, or press Alt with the up or down arrow, to change the group order for everyone.</p>}
+      {editable && <p id={`${id}-edit`} className={styles.visuallyHidden}>{movable ? 'Drag a page onto another group, or press Alt with the up or down arrow, to move it there. ' : ''}Press F2 to rename a page.</p>}
       {orderError && <p className={styles.navigationError} role="alert">{orderError}</p>}
       <nav className={styles.documentNavigation} ref={navRef} aria-label="Project documents" {...listDragHandlers}>
         {groups.length === 0 && <p className={styles.navigationEmpty}>No documents yet.</p>}
@@ -362,7 +518,7 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
           </div>}
         </div>}
         {groups.map((group, index) => group.name === '' ? group.items.map((entry) => documentRow(entry)) : (
-          <div className={`${styles.documentGroup} ${dragging === group.name ? styles.draggingGroup : ''} ${dropMarker(group.name)}`} key={group.name} data-group={group.name}>
+          <div className={`${styles.documentGroup} ${dragging === group.name ? styles.draggingGroup : ''} ${dropMarker(group.name)} ${pageTarget === group.name ? styles.dropInto : ''}`} key={group.name} data-group={group.name}>
             <button className={styles.groupToggle} onClick={(event) => toggleGroup(event, group.name)} {...toggleHandlers(group.name)}
               aria-expanded={!collapsed.has(group.name)} aria-controls={`${id}-group-${index}`}>
               <span className={`${styles.groupCaret} ${!collapsed.has(group.name) ? styles.groupExpanded : ''}`}><Icon name="chevronRight" size={14} /></span>
