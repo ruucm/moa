@@ -45,7 +45,7 @@
    in view, as a line in the accent colour; on any other page it shows while the pointer or keyboard
    focus is on the row, and always on a touch screen, where nothing hovers. */
 .documentRow { position: relative; margin: var(--space-1) 0; }
-.documentRow:hover > .documentLink:not(.currentDocument) { background: var(--color-surface-subtle); color: var(--color-text-primary); }
+.documentRow:is(:hover, .menuRow) > .documentLink:not(.currentDocument) { background: var(--color-surface-subtle); color: var(--color-text-primary); }
 .pinnableRow > .documentLink { padding-right: var(--space-10); }
 .documentLabel { min-width: 0; }
 .documentContext { display: block; overflow: hidden; color: var(--color-text-muted); font-size: var(--font-size-xs); font-weight: normal; line-height: 1.6; text-overflow: ellipsis; white-space: nowrap; }
@@ -53,15 +53,18 @@
 .documentPin:hover { color: var(--color-text-primary); }
 .pinnedRow > .documentPin { color: var(--color-accent-text); }
 .pinnedRow > .documentPin:hover { color: var(--color-accent-hover); }
-/* An admin's pencil, beside the pin, edits the page's title. It shows with the pin, over the end of the title's
-   first line, on the background the row has under the pointer. */
-.documentEdit { position: absolute; top: 6px; right: 34px; display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: var(--radius-sm); background: var(--color-surface-subtle); color: var(--color-text-muted); cursor: pointer; }
-.documentEdit:hover { color: var(--color-text-primary); }
-.documentRow:has(> .currentDocument) > .documentEdit { background: var(--color-accent-subtle); }
-/* The title field takes the row's place while it is edited. */
-.renameForm { display: flex; align-items: center; gap: var(--space-3); min-height: 44px; padding: var(--space-1) var(--space-1) var(--space-1) var(--space-3); }
+/* The title field takes the row's place while it is edited, in the row's shape: a hairline round the text, which
+   starts where the title stood, and no ring. */
+.renameForm { display: flex; align-items: center; gap: var(--space-1); min-height: 44px; padding: 0 var(--space-1) 0 var(--space-3); }
 .renameForm > svg { flex-shrink: 0; color: var(--color-text-muted); }
-.renameInput { flex: 1; min-width: 0; min-height: 36px; padding: var(--space-1) var(--space-2); border: 1px solid var(--color-border-control); border-radius: var(--radius-sm); background: var(--color-surface-panel); color: var(--color-text-primary); font: inherit; font-size: var(--font-size-sm); line-height: 1.55; }
+.renameInput { flex: 1; min-width: 0; min-height: 36px; padding: var(--space-1) var(--space-2); border: 0; border-radius: var(--radius-sm); background: var(--color-surface-panel); box-shadow: inset 0 0 0 1px var(--color-border-subtle); color: var(--color-text-primary); font: inherit; font-size: var(--font-size-sm); line-height: 1.55; }
+.renameInput:focus-visible { outline: none; box-shadow: inset 0 0 0 1px var(--color-border-control); }
+/* An admin's page menu — a right click, a long press, or Shift+F10 on the link — renames the page or pins it. */
+.pageMenu { position: fixed; z-index: var(--z-menu); min-width: 11rem; padding: var(--space-1); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-md); background: var(--color-surface-panel); box-shadow: var(--shadow-md); }
+.pageMenuItem { display: flex; align-items: center; gap: var(--space-3); width: 100%; min-height: 34px; padding: 0 var(--space-3); border: 0; border-radius: var(--radius-sm); background: none; color: var(--color-text-primary); font: inherit; font-size: var(--font-size-sm); line-height: 1.4; text-align: left; cursor: pointer; }
+.pageMenuItem > svg { flex-shrink: 0; color: var(--color-text-muted); }
+.pageMenuItem:hover, .pageMenuItem:focus-visible { background: var(--color-surface-subtle); outline: none; }
+.pageMenuKey { margin-left: auto; padding-left: var(--space-4); color: var(--color-text-muted); font: inherit; font-size: var(--font-size-xs); }
 /* A page dragged to another group, and the group it would join. */
 .draggingPage { opacity: .4; }
 .dropInto { border-radius: var(--radius-sm); background: var(--color-accent-subtle); }
@@ -168,16 +171,15 @@
 .chatDrawer > div { display: flex; flex: 1; min-height: 0; padding: 0; overflow: hidden; }
 
 @media (hover: hover) {
-  .documentRow:not(.pinnedRow) > .documentPin, .documentEdit { opacity: 0; }
-  .documentRow:not(.pinnedRow):is(:hover, :has(:focus-visible)) > .documentPin, .documentRow:is(:hover, :has(:focus-visible)) > .documentEdit { opacity: 1; }
+  .documentRow:not(.pinnedRow) > .documentPin { opacity: 0; }
+  .documentRow:not(.pinnedRow):is(:hover, :has(:focus-visible), .menuRow) > .documentPin { opacity: 1; }
 }
 @media (hover: none) {
   .pinnableRow > .documentLink { padding-right: var(--space-12); }
   .documentPin { top: 0; right: 0; width: 44px; height: 44px; }
-  /* Both buttons stay in view, so the title keeps clear of them. Phones zoom into a field under 16px. */
-  .editableRow > .documentLink { padding-right: calc(var(--space-12) + 44px); }
-  .documentEdit { top: 0; right: 44px; width: 44px; height: 44px; background: none; }
-  .documentRow:has(> .currentDocument) > .documentEdit { background: none; }
+  /* A long press on an admin's page opens its menu, not the browser's link menu or a text selection. Phones zoom
+     into a field under 16px. */
+  .editableRow > .documentLink { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
   .renameInput { font-size: 1rem; }
 }
 @media (min-width: 1152px) {

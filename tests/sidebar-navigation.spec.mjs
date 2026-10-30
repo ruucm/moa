@@ -369,7 +369,7 @@ test('an invited reader pins pages for themselves too', async ({ page }) => {
   expect(posts).toEqual([{ slug: 'moa-design', doc: pageSlug('106', 8), pinned: true }])
 })
 
-test('on a touch screen every pin, and an admin\'s pencil, stays in view as a full-size target', async ({ browser, baseURL }) => {
+test('on a touch screen every pin stays in view as a full-size target, and a long press opens the page menu', async ({ browser, baseURL }) => {
   const context = await browser.newContext({ baseURL, hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } })
   const page = await context.newPage()
   try {
@@ -379,14 +379,30 @@ test('on a touch screen every pin, and an admin\'s pencil, stays in view as a fu
     await page.setViewportSize({ width: 390, height: 844 })
     await page.getByRole('button', { name: 'Open document navigation' }).tap()
     const navigation = page.getByRole('dialog').getByRole('navigation', { name: 'Project documents', exact: true })
+    const link = navigation.getByRole('link', { name: 'P1 · 스틸', exact: true })
     const pin = navigation.getByRole('button', { name: 'Pin P1 · 스틸', exact: true })
-    const pencil = navigation.getByRole('button', { name: 'Rename P1 · 스틸', exact: true })
     await expect(pin).toHaveCSS('opacity', '1')
-    await expect(pencil).toHaveCSS('opacity', '1')
-    const [button, edit, label] = await Promise.all([rect(pin), rect(pencil), rect(navigation.getByRole('link', { name: 'P1 · 스틸', exact: true }).locator('span'))])
-    expect(Math.round(Math.min(button.width, button.height, edit.width, edit.height))).toBeGreaterThanOrEqual(44)
-    expect(label.right).toBeLessThanOrEqual(edit.left + 0.5)
-    expect(edit.right).toBeLessThanOrEqual(button.left + 0.5)
+    await expect(navigation.getByRole('button', { name: /^Rename / })).toHaveCount(0)
+    const [button, label] = await Promise.all([rect(pin), rect(link.locator('span'))])
+    expect(Math.round(Math.min(button.width, button.height))).toBeGreaterThanOrEqual(44)
+    expect(label.right).toBeLessThanOrEqual(button.left + 0.5)
+
+    // Half a second's press on a page opens its menu in the drawer; lifting the finger then does not open the page.
+    const box = await rect(link)
+    const touch = await context.newCDPSession(page)
+    await touch.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: box.left + 60, y: box.top + box.height / 2 }] })
+    const menu = page.getByRole('dialog').getByRole('menu', { name: 'P1 · 스틸', exact: true })
+    await expect(menu).toBeVisible()
+    await touch.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+    await page.waitForTimeout(400)
+    await expect(menu).toBeVisible()
+    expect(page.url()).toContain('/p/moa-design/overview')
+    await menu.getByRole('menuitem', { name: 'Rename', exact: true }).tap()
+    await expect(navigation.getByRole('textbox', { name: 'Title of P1 · 스틸', exact: true })).toBeFocused()
+    // (Escape would close the drawer itself, as on any dialog.) Enter on the title as it was saves nothing.
+    await page.keyboard.press('Enter')
+    await expect(link).toBeVisible()
+
     await pin.tap()
     await expect.poll(() => pinnedTitles(navigation)).toEqual(['P1 · 스틸'])
   } finally {
@@ -395,7 +411,8 @@ test('on a touch screen every pin, and an admin\'s pencil, stays in view as a fu
 })
 
 // An admin drags a page onto another group, or moves it a group up or down with Alt+arrow keys, and edits its title
-// with the pencil beside the pin or F2. Each change is saved in the page's file (mocked here) and shows at once.
+// from the page menu (a right click, a long press, or Shift+F10 on the link) or with F2. Each change is saved in the
+// page's file (mocked here) and shows at once.
 const mockPageSaves = async (page, saved, posts, respond = () => ({ json: { ok: true } })) => {
   await page.route('**/api/doc/update', async route => {
     const body = route.request().postDataJSON()
@@ -503,21 +520,67 @@ test('a page moves a group up or down and is renamed from the keyboard, keeping 
   expect(posts).toHaveLength(3)
 })
 
-test('the pencil beside the pin renames a page, and a failed save puts the old title back', async ({ page }) => {
+test('the page menu, from a right click or Shift+F10, renames a page or pins it; a failed save puts the old title back', async ({ page }) => {
   const saved = {}
   const posts = []
+  const pins = []
   await mockPageSaves(page, saved, posts)
+  await mockPins(page, saved, pins)
   const navigation = await openLongProject(page, { episodes: ['105', '106'], expanded: ['106'], saved })
   const episode = navigation.locator(`[data-group="${groupName('106')}"]`)
-  const pencil = episode.getByRole('button', { name: 'Rename P1 · 스틸', exact: true })
-  await expect(pencil).toHaveCSS('opacity', '0')
-  await episode.getByRole('link', { name: 'P1 · 스틸', exact: true }).hover()
-  await expect(pencil).toHaveCSS('opacity', '1')
-  await pencil.click()
+  const still = episode.getByRole('link', { name: 'P1 · 스틸', exact: true })
+  const menu = page.getByRole('menu', { name: 'P1 · 스틸', exact: true })
+  const near = (a, b) => Math.abs(a - b) <= 1
+
+  // Nothing but the pin shows on the row. A right click opens the menu where the pointer is.
+  await still.hover()
+  await expect(navigation.getByRole('button', { name: /^Rename / })).toHaveCount(0)
+  await expect(menu).toHaveCount(0)
+  await still.click({ button: 'right' })
+  await expect(menu).toBeVisible()
+  await expect(menu.getByRole('menuitem', { name: 'Rename', exact: true })).toBeFocused()
+  await expect(menu.getByRole('menuitem', { name: 'Pin to the top', exact: true })).toBeVisible()
+  const [panel, target] = await Promise.all([rect(menu), rect(still)])
+  expect(near(panel.left, target.left + target.width / 2) && near(panel.top, target.top + target.height / 2)).toBe(true)
+  // Escape closes it, with focus back on the link.
+  await page.keyboard.press('Escape')
+  await expect(menu).toHaveCount(0)
+  await expect(still).toBeFocused()
+
+  // Shift+F10 opens it by the link; the arrow keys move through it, around its ends, and Enter pins the page.
+  await page.keyboard.press('Shift+F10')
+  await expect(menu.getByRole('menuitem', { name: 'Rename', exact: true })).toBeFocused()
+  const byLink = await rect(menu)
+  expect(byLink.left).toBeGreaterThan(target.left)
+  expect(byLink.left).toBeLessThan(target.right)
+  expect(byLink.top).toBeGreaterThan(target.top)
+  await page.keyboard.press('ArrowDown')
+  await expect(menu.getByRole('menuitem', { name: 'Pin to the top', exact: true })).toBeFocused()
+  await page.keyboard.press('ArrowDown')
+  await expect(menu.getByRole('menuitem', { name: 'Rename', exact: true })).toBeFocused()
+  await page.keyboard.press('ArrowUp')
+  await page.keyboard.press('Enter')
+  await expect(menu).toHaveCount(0)
+  await expect.poll(() => pinnedTitles(navigation)).toEqual(['P1 · 스틸'])
+  expect(pins).toEqual([{ slug: 'moa-design', doc: pageSlug('106', 2), pinned: true }])
+  await expect(still).toBeFocused()
+
+  // A pinned page offers to unpin; a click elsewhere closes the menu.
+  await still.click({ button: 'right' })
+  await expect(menu.getByRole('menuitem', { name: 'Unpin', exact: true })).toBeVisible()
+  await page.mouse.click(900, 600)
+  await expect(menu).toHaveCount(0)
+
+  // Rename opens the title in its field; leaving the field saves it.
+  const rename = async (name) => {
+    await episode.getByRole('link', { name, exact: true }).click({ button: 'right' })
+    await page.getByRole('menu', { name, exact: true }).getByRole('menuitem', { name: 'Rename', exact: true }).click()
+  }
+  await rename('P1 · 스틸')
   const field = episode.getByRole('textbox', { name: 'Title of P1 · 스틸', exact: true })
   await expect(field).toBeFocused()
+  await expect(menu).toHaveCount(0)
   await field.fill('스틸 컷 · 확정')
-  // Leaving the field saves it.
   await page.mouse.click(900, 600)
   await expect(episode.getByRole('link', { name: '스틸 컷 · 확정', exact: true })).toBeVisible()
   await expect(field).toHaveCount(0)
@@ -527,8 +590,7 @@ test('the pencil beside the pin renames a page, and a failed save puts the old t
 
   // A title left as it was, or emptied, saves nothing.
   for (const value of [null, '   ']) {
-    await episode.getByRole('link', { name: '스틸 컷 · 확정', exact: true }).hover()
-    await episode.getByRole('button', { name: 'Rename 스틸 컷 · 확정', exact: true }).click()
+    await rename('스틸 컷 · 확정')
     if (value !== null) await episode.getByRole('textbox').fill(value)
     await page.keyboard.press('Enter')
     await expect(episode.getByRole('link', { name: '스틸 컷 · 확정', exact: true })).toBeVisible()
@@ -538,8 +600,7 @@ test('the pencil beside the pin renames a page, and a failed save puts the old t
 
   await page.unroute('**/api/doc/update')
   await mockPageSaves(page, saved, posts, () => ({ status: 500, json: { error: '검수용 저장 실패' } }))
-  await episode.getByRole('link', { name: 'P2 · 파일럿', exact: true }).hover()
-  await episode.getByRole('button', { name: 'Rename P2 · 파일럿', exact: true }).click()
+  await rename('P2 · 파일럿')
   await episode.getByRole('textbox').fill('저장 안 될 제목')
   await page.keyboard.press('Enter')
   await expect(page.getByRole('alert').filter({ hasText: '검수용 저장 실패' })).toBeVisible()
@@ -553,9 +614,15 @@ test('an invited reader cannot rename or move pages', async ({ page }) => {
   await link.hover()
   await expect(navigation.getByRole('button', { name: /^Rename / })).toHaveCount(0)
   await expect(link).not.toHaveAttribute('draggable', 'true')
+  await link.click({ button: 'right' })
+  await page.waitForTimeout(300)
+  await expect(page.getByRole('menu')).toHaveCount(0)
   await link.focus()
   await page.keyboard.press('F2')
   await expect(navigation.getByRole('textbox')).toHaveCount(0)
+  await page.keyboard.press('Shift+F10')
+  await page.waitForTimeout(300)
+  await expect(page.getByRole('menu')).toHaveCount(0)
 })
 
 test('the page API rewrites only the title or group literal of the file', async ({ page, browser, baseURL }) => {

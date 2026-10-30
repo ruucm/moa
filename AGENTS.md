@@ -145,8 +145,9 @@ curl -s -b /tmp/moa.jar -X POST http://localhost:5001/api/pin \
 
 ### Renaming pages and moving them to another group
 
-An admin renames a page with the pencil beside its pin (or F2 on its link): Enter or leaving the field saves,
-Esc keeps the old title. A page dragged onto another group moves into it (or Alt+↑/↓ on its link, one group up or
+An admin renames a page from its menu — a right click on its row, a long press on a touch screen, or Shift+F10 on
+its link — or with F2 on the link: Enter or leaving the field saves, Esc keeps the old title. The menu pins the
+page too. A page dragged onto another group moves into it (or Alt+↑/↓ on its link, one group up or
 down); a closed group opens to show it arrive. Both are saved at once in the page's `.mdx` — its `export const title`
 or `group` literal is rewritten where it stands (a missing group goes on the line after the title) and the rest of the
 file is kept byte for byte — so every open reader sees the change through the usual live reload. The text is kept on

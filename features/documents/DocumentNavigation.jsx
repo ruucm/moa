@@ -1,7 +1,7 @@
 'use client'
 
-import React, { useEffect, useId, useMemo, useRef, useState } from 'react'
-import { flushSync } from 'react-dom'
+import React, { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { createPortal, flushSync } from 'react-dom'
 import { Brand, Icon, IconButton, StatusBadge } from '../../components/ui/index.jsx'
 import { InviteButton } from './DocumentActions.jsx'
 import { SearchButton } from '../search/GlobalSearch.jsx'
@@ -97,6 +97,12 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
   const renamingRef = useRef(null)
   const renameInput = useRef(null)
   const renamedRow = useRef(null)
+  // The menu open on a page row — { entry, index, x, y }, `index` for the row in the Pinned group — from a right
+  // click, a long press, or Shift+F10 on the link; the link gets focus back when the menu closes from the keyboard.
+  const [menu, setMenu] = useState(null)
+  const menuRef = useRef(null)
+  const menuLink = useRef(null)
+  const longPress = useRef(null)
   const movedPage = useRef(null)
   const navRef = useRef(null)
   const openedGroup = useRef(null)
@@ -325,6 +331,85 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
     if (text && text !== entry.title) savePage({ slug: entry.slug, title: text })
   }
 
+  // The page menu opens at the pointer, or by the link when it was opened from the keyboard.
+  const openMenu = (event, entry, index) => {
+    event.preventDefault?.()
+    const link = event.currentTarget
+    const rect = link.getBoundingClientRect()
+    const atPointer = event.clientX || event.clientY
+    menuLink.current = link
+    setMenu({ entry, index, x: atPointer ? event.clientX : rect.left + 24, y: atPointer ? event.clientY : rect.bottom - 6 })
+  }
+  const closeMenu = (toLink) => {
+    const link = menuLink.current
+    menuLink.current = null
+    setMenu(null)
+    if (toLink && link?.isConnected) link.focus()
+  }
+  // The open menu sits at the pointer, inside the window, and its first item takes focus. A press elsewhere, a
+  // scroll, or leaving the window closes it.
+  useLayoutEffect(() => {
+    const panel = menuRef.current
+    if (!menu || !panel) return
+    const { width, height } = panel.getBoundingClientRect()
+    panel.style.left = `${Math.max(8, Math.min(menu.x, window.innerWidth - width - 8))}px`
+    panel.style.top = `${Math.max(8, Math.min(menu.y, window.innerHeight - height - 8))}px`
+    panel.querySelector('[role="menuitem"]')?.focus()
+    const away = (event) => { if (!panel.contains(event.target)) closeMenu(false) }
+    const close = () => closeMenu(false)
+    document.addEventListener('pointerdown', away, true)
+    document.addEventListener('scroll', close, true)
+    window.addEventListener('resize', close)
+    window.addEventListener('blur', close)
+    return () => {
+      document.removeEventListener('pointerdown', away, true)
+      document.removeEventListener('scroll', close, true)
+      window.removeEventListener('resize', close)
+      window.removeEventListener('blur', close)
+    }
+  }, [menu])
+  // The arrow keys move through the menu; Escape (or Tab) closes it and puts focus back on the link.
+  const menuKeys = (event) => {
+    const items = [...event.currentTarget.querySelectorAll('[role="menuitem"]')]
+    const go = (index) => { event.preventDefault(); items.at(index % items.length)?.focus() }
+    const at = items.indexOf(document.activeElement)
+    if (event.key === 'ArrowDown') go(at + 1)
+    else if (event.key === 'ArrowUp') go(at - 1)
+    else if (event.key === 'Home') go(0)
+    else if (event.key === 'End') go(-1)
+    else if (event.key === 'Escape' || event.key === 'Tab') { event.preventDefault(); closeMenu(true) }
+  }
+  // On a touch screen the menu opens on a long press (half a second, without moving); the tap that ends the press
+  // does not open the page.
+  const stopPress = () => { clearTimeout(longPress.current?.timer); if (longPress.current?.timer) longPress.current = null }
+  const pressHandlers = (entry, index) => ({
+    onPointerDown: (event) => {
+      stopPress()
+      longPress.current = null
+      if (event.pointerType !== 'touch' || event.button !== 0) return
+      const link = event.currentTarget
+      const { clientX, clientY } = event
+      longPress.current = { x: clientX, y: clientY, timer: setTimeout(() => {
+        longPress.current = { fired: true }
+        openMenu({ currentTarget: link, clientX, clientY }, entry, index)
+      }, 500) }
+    },
+    onPointerMove: (event) => {
+      const press = longPress.current
+      if (press?.timer && Math.hypot(event.clientX - press.x, event.clientY - press.y) > 8) stopPress()
+    },
+    onPointerUp: stopPress,
+    onPointerCancel: stopPress,
+  })
+  const followLink = (event) => {
+    if (longPress.current?.fired) {
+      event.preventDefault()
+      longPress.current = null
+      return
+    }
+    onNavigate?.(event)
+  }
+
   const endDrag = () => { setDragging(null); setDropTarget(null); setDraggedPage(null); setPageTarget(null) }
   const groupAt = (event) => event.target.closest?.('[data-group]')?.dataset.group
   // A dragged page joins the group under the pointer, unless that is its own group.
@@ -372,8 +457,9 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
     },
   }
   // An admin's page link: dragged onto another group, or moved with Alt and the up or down arrow, the page joins
-  // that group; F2 edits its title. `pinned` is the page's row in the Pinned group, which stays where it is.
-  const pageHandlers = (entry, pinned) => editable ? {
+  // that group; F2 edits its title, and a right click, a long press, or Shift+F10 opens its menu. `pinned` is the
+  // page's row in the Pinned group, which stays where it is (`index` its place there).
+  const pageHandlers = (entry, pinned, index) => editable ? {
     ...(movable && {
       draggable: true,
       onDragStart: (event) => {
@@ -382,7 +468,14 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
       },
       onDragEnd: endDrag,
     }),
+    ...pressHandlers(entry, index),
+    onContextMenu: (event) => openMenu(event, entry, index),
     onKeyDown: (event) => {
+      if ((event.key === 'F10' && event.shiftKey) || event.key === 'ContextMenu') {
+        event.preventDefault()
+        openMenu(event, entry, index)
+        return
+      }
       if (event.key === 'F2' && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
         event.preventDefault()
         startRename(entry, pinned)
@@ -394,7 +487,7 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
       const target = named[named.findIndex((group) => group.name === (entry.group || '')) + (event.key === 'ArrowUp' ? -1 : 1)]
       if (target) movePage(entry, target.name, { focus: true, reveal: !pinned })
     },
-    'aria-keyshortcuts': movable ? 'Alt+ArrowUp Alt+ArrowDown F2' : 'F2',
+    'aria-keyshortcuts': movable ? 'Alt+ArrowUp Alt+ArrowDown F2 Shift+F10' : 'F2 Shift+F10',
     'aria-describedby': `${id}-edit`,
   } : {}
   const toggleHandlers = (name) => reorderable ? {
@@ -423,9 +516,8 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
     return index(name) < index(dragging) ? styles.dropBefore : styles.dropAfter
   }
 
-  // A page row: the link, and for a signed-in reader the pin at its end — for an admin, the pencil that edits the
-  // title beside it. In the Pinned group (`index` is the row's place there) the link also names the page's own
-  // group, since pages of different groups often share a title.
+  // A page row: the link, and for a signed-in reader the pin at its end. In the Pinned group (`index` is the row's
+  // place there) the link also names the page's own group, since pages of different groups often share a title.
   const documentRow = (entry, index) => {
     const pinned = pinnedSlugs.includes(entry.slug)
     const inPinned = index !== undefined
@@ -442,17 +534,13 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
       </div>
     )
     return (
-      <div key={entry.slug} className={`${styles.documentRow} ${authed ? styles.pinnableRow : ''} ${editable ? styles.editableRow : ''} ${pinned ? styles.pinnedRow : ''} ${draggedPage === entry.slug ? styles.draggingPage : ''}`}>
+      <div key={entry.slug} className={`${styles.documentRow} ${authed ? styles.pinnableRow : ''} ${editable ? styles.editableRow : ''} ${pinned ? styles.pinnedRow : ''} ${draggedPage === entry.slug ? styles.draggingPage : ''} ${menu?.entry.slug === entry.slug && (menu.index !== undefined) === inPinned ? styles.menuRow : ''}`}>
         <a href={`/p/${encodeURIComponent(project.slug)}/${encodeURIComponent(entry.slug)}`} data-doc={entry.slug}
           className={`${styles.documentLink} ${entry.slug === doc?.slug ? styles.currentDocument : ''}`}
-          aria-current={entry.slug === doc?.slug ? 'page' : undefined} onClick={onNavigate} {...pageHandlers(entry, inPinned)}>
+          aria-current={entry.slug === doc?.slug ? 'page' : undefined} onClick={followLink} {...pageHandlers(entry, inPinned, index)}>
           <Icon name="file" size={16} />
           <span className={styles.documentLabel}>{entry.title}{context && <>{' '}<small className={styles.documentContext} title={entry.group}>{entry.group}</small></>}</span>
         </a>
-        {editable && <button className={styles.documentEdit} onClick={() => startRename(entry, inPinned)}
-          aria-label={`Rename ${entry.title}`} title="Rename">
-          <Icon name="edit" size={14} />
-        </button>}
         {authed && <button className={styles.documentPin} onClick={(event) => togglePin(event, entry, index)}
           aria-label={`${pinned ? 'Unpin' : 'Pin'} ${entry.title}`} title={pinned ? 'Unpin' : 'Pin to the top'}>
           <Icon name="pin" size={14} />
@@ -503,7 +591,7 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
         </div>}
       </div>
       {reorderable && <p id={`${id}-reorder`} className={styles.visuallyHidden}>Drag a group, or press Alt with the up or down arrow, to change the group order for everyone.</p>}
-      {editable && <p id={`${id}-edit`} className={styles.visuallyHidden}>{movable ? 'Drag a page onto another group, or press Alt with the up or down arrow, to move it there. ' : ''}Press F2 to rename a page.</p>}
+      {editable && <p id={`${id}-edit`} className={styles.visuallyHidden}>{movable ? 'Drag a page onto another group, or press Alt with the up or down arrow, to move it there. ' : ''}Press F2 to rename a page, or Shift+F10 for its menu.</p>}
       {orderError && <p className={styles.navigationError} role="alert">{orderError}</p>}
       <nav className={styles.documentNavigation} ref={navRef} aria-label="Project documents" {...listDragHandlers}>
         {groups.length === 0 && <p className={styles.navigationEmpty}>No documents yet.</p>}
@@ -531,6 +619,23 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
           </div>
         ))}
       </nav>
+      {menu && createPortal(
+        <div ref={menuRef} className={styles.pageMenu} role="menu" aria-label={menu.entry.title} onKeyDown={menuKeys}>
+          <button type="button" role="menuitem" className={styles.pageMenuItem}
+            onClick={() => { const { entry, index } = menu; closeMenu(false); startRename(entry, index !== undefined) }}>
+            <Icon name="edit" size={14} /><span>Rename</span><kbd className={styles.pageMenuKey} aria-hidden="true">F2</kbd>
+          </button>
+          <button type="button" role="menuitem" className={styles.pageMenuItem}
+            onClick={() => {
+              const { entry, index } = menu
+              closeMenu(false)
+              togglePin({ detail: 1 }, entry, index)
+              ;(findLink(navRef.current, entry.slug, index !== undefined) || findLink(navRef.current, entry.slug, false))?.focus()
+            }}>
+            <Icon name="pin" size={14} /><span>{pinnedSlugs.includes(menu.entry.slug) ? 'Unpin' : 'Pin to the top'}</span>
+          </button>
+        </div>,
+        navRef.current?.closest('[role="dialog"]') || document.body)}
       <div className={styles.navigationFooter}>
         {authed ? <a href="/"><Icon name="arrowLeft" size={16} />All projects</a> : <span><Icon name="lock" size={14} />Only this document is shared</span>}
       </div>
