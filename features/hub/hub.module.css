@@ -14,7 +14,7 @@
   --color-accent-subtle: #e9eddf;
   --color-accent-border: #c2cdb1;
   --color-focus: #526448;
-  min-height: 100vh; background: var(--color-surface-page); color: var(--color-text-primary);
+  min-height: calc(100vh - var(--moa-tabs-h)); background: var(--color-surface-page); color: var(--color-text-primary);
 }
 .skipLink { position: fixed; top: 1rem; left: 1rem; z-index: 100; transform: translateY(-200%); padding: var(--space-3) var(--space-4); border-radius: var(--radius-sm); background: var(--color-text-primary); color: var(--color-surface-panel); }
 .skipLink:focus { transform: translateY(0); }

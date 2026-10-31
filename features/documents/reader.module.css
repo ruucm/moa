@@ -1,12 +1,14 @@
+/* Under the window's tab strip, when it shows (styles/base.css), the sticky sidebar, outline and chat column stick
+   below it and fill what is left of the window. */
 .shell {
   display: grid;
   grid-template-columns: 17rem minmax(0, 1fr);
-  min-height: 100dvh;
+  min-height: calc(100dvh - var(--moa-tabs-h));
   color: var(--color-text-primary);
   background: var(--color-surface-panel);
 }
 .guestShell, .sidebarHidden { grid-template-columns: minmax(0, 1fr); }
-.sidebar { position: sticky; top: 0; height: 100dvh; min-width: 0; border-right: 1px solid var(--color-border-subtle); background: var(--color-surface-page); }
+.sidebar { position: sticky; top: var(--moa-tabs-h); height: calc(100dvh - var(--moa-tabs-h)); min-width: 0; border-right: 1px solid var(--color-border-subtle); background: var(--color-surface-page); }
 .navigation { display: flex; flex-direction: column; min-height: 0; height: 100%; }
 .brandRow { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); min-height: 80px; padding: var(--space-5) var(--space-6); }
 /* The search and the sidebar toggle sit at the end of the brand row, flush with its edge. */
@@ -113,20 +115,20 @@
 .documentLayout { display: grid; grid-template-columns: minmax(0, 1fr); max-width: calc(var(--width-wide) + 16rem); margin: 0 auto; padding: var(--space-12) var(--space-10) var(--space-8); }
 /* How far a wide <Figure> may bleed past the reading column on each side. The layout owns this
    budget because only it knows the room left beside the column; the chat panel takes it away. */
-.documentMain { min-width: 0; outline: none; scroll-margin-top: var(--space-8); --figure-bleed: 0rem; }
+.documentMain { min-width: 0; outline: none; scroll-margin-top: calc(var(--space-8) + var(--moa-tabs-h)); --figure-bleed: 0rem; }
 .withChat .documentMain { --figure-bleed: 0rem; }
 .documentMeta { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-3); max-width: var(--width-reader); margin: 0 auto var(--space-5); color: var(--color-text-muted); font-size: var(--font-size-xs); line-height: 1.65; }
 .documentMeta:empty { display: none; }
 .documentMeta > span + time::before { content: '·'; margin-right: var(--space-3); }
 .article { margin: 0 auto; min-width: 0; }
-.article :is(h2, h3) { scroll-margin-top: var(--space-8); }
+.article :is(h2, h3) { scroll-margin-top: calc(var(--space-8) + var(--moa-tabs-h)); }
 .documentFooter { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: var(--space-4); max-width: var(--width-reader); margin: var(--space-20) auto 0; padding: var(--space-6) 0; border-top: 1px solid var(--color-border-subtle); color: var(--color-text-muted); font-size: var(--font-size-xs); }
 .documentFooter > span, .documentFooter a { display: inline-flex; align-items: center; gap: var(--space-3); }
 .documentFooter > span > span > svg { width: 24px; height: 24px; }
 .documentFooter a { color: var(--color-text-muted); text-decoration: none; }
-.outline { display: none; position: sticky; top: var(--space-10); align-self: start; min-width: 0; max-height: calc(100dvh - var(--space-20)); padding-top: var(--space-1); }
+.outline { display: none; position: sticky; top: calc(var(--space-10) + var(--moa-tabs-h)); align-self: start; min-width: 0; max-height: calc(100dvh - var(--space-20) - var(--moa-tabs-h)); padding-top: var(--space-1); }
 .outlineHeading { display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-4); color: var(--color-text-secondary); font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); }
-.outline nav { max-height: calc(100dvh - 14rem); overflow-y: auto; border-left: 1px solid var(--color-border-subtle); scrollbar-width: thin; }
+.outline nav { max-height: calc(100dvh - 14rem - var(--moa-tabs-h)); overflow-y: auto; border-left: 1px solid var(--color-border-subtle); scrollbar-width: thin; }
 .outlineLink { display: block; padding: var(--space-2) 0 var(--space-2) var(--space-4); border-left: 2px solid transparent; margin-left: -1px; color: var(--color-text-muted); font-size: var(--font-size-xs); line-height: 1.6; text-decoration: none; word-break: keep-all; overflow-wrap: anywhere; }
 .outlineLink:hover { color: var(--color-text-primary); }
 .outlineNested { padding-left: var(--space-6); }
@@ -134,7 +136,7 @@
 .backToTop { display: inline-flex; gap: var(--space-2); align-items: center; margin-top: var(--space-6); color: var(--color-text-muted); font-size: var(--font-size-xs); text-decoration: none; }
 .withChat { grid-template-columns: 17rem minmax(0, 1fr) 25rem; }
 .withChat.sidebarHidden { grid-template-columns: minmax(0, 1fr) 25rem; }
-.chatColumn { position: sticky; top: 0; min-width: 0; height: 100dvh; border-left: 1px solid var(--color-border-subtle); background: var(--color-surface-panel); }
+.chatColumn { position: sticky; top: var(--moa-tabs-h); min-width: 0; height: calc(100dvh - var(--moa-tabs-h)); border-left: 1px solid var(--color-border-subtle); background: var(--color-surface-panel); }
 .outlineHidden .outline { display: none; }
 .outlineHidden { grid-template-columns: minmax(0, 1fr) !important; }
 .withChat .outlineOption { display: none; }

@@ -250,20 +250,27 @@ test('the preview copies the page link, opens the page in a new tab, and a click
   await expect(preview(page).getByRole('button', { name: 'Link copied', exact: true })).toBeVisible()
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(`${baseURL}${href}`)
 
-  const newTab = preview(page).getByRole('link', { name: 'Open in new tab', exact: true })
-  await expect(newTab).toHaveAttribute('href', href)
-  await expect(newTab).toHaveAttribute('target', '_blank')
-  const [opened] = await Promise.all([context.waitForEvent('page'), newTab.click()])
-  await expect(opened).toHaveURL(new RegExp(`${escapeRegExp(href)}$`))
-  await expect(opened.getByRole('heading', { name: '작업의 흐름을 기록해요', exact: true })).toBeVisible()
-  await opened.close()
-
-  // The search is still open here; the page in the preview opens with a click, in this tab.
-  await expect(palette(page)).toBeVisible()
+  // The page in the preview opens with a click, in this tab.
   await expect(previewDocument(page).locator('h1')).toHaveText('작업의 흐름을 기록해요')
   await part(palette(page), 'preview-body').click({ position: { x: 120, y: 160 } })
   await expect(page).toHaveURL(new RegExp(`${escapeRegExp(href)}$`))
   await expect(page.getByRole('heading', { name: '작업의 흐름을 기록해요', exact: true })).toBeVisible()
+
+  // Its link in the header opens it in a new tab of moa's own, beside this page in the strip at the top of the window
+  // (tests/tabs.spec.mjs) — with a modifier key, in one of the browser's.
+  await openDocument(page)
+  await page.keyboard.press('ControlOrMeta+k')
+  await field(page).fill('다음 단계')
+  await expect(previewTitle(page)).toHaveText('다음 단계')
+  const newTab = preview(page).getByRole('link', { name: 'Open in new tab', exact: true })
+  await expect(newTab).toHaveAttribute('href', href)
+  let opened = 0
+  context.on('page', () => { opened += 1 })
+  await newTab.click()
+  await expect(page).toHaveURL(new RegExp(`${escapeRegExp(href)}$`))
+  await expect(page.getByRole('heading', { name: '작업의 흐름을 기록해요', exact: true })).toBeVisible()
+  await expect(page.getByRole('navigation', { name: 'Tabs', exact: true }).getByRole('link')).toHaveText(['더 명확하게, 더 편안하게', '다음 단계'])
+  expect(opened).toBe(0)
 })
 
 test('the preview can be hidden and shown again, and the choice is kept', async ({ page }) => {

@@ -1,0 +1,42 @@
+/* The window's tab strip (TabStrip.jsx), fixed across its top over the room the page leaves it (styles/base.css)
+   while there are two tabs or more. The tabs share the width like a browser's, down to a readable minimum, then the
+   row scrolls sideways; the tab on screen is the raised white one, and a hairline parts two others. */
+.strip { position: fixed; inset: 0 0 auto; z-index: var(--z-sticky); display: flex; align-items: center; gap: var(--space-1); height: var(--moa-tabs-size); padding: 0 var(--space-2); border-bottom: 1px solid var(--color-border-subtle); background: var(--color-surface-subtle); color: var(--color-text-secondary); }
+.tabs { display: flex; align-items: center; gap: 2px; min-width: 0; height: 100%; margin: 0; padding: 0 2px; list-style: none; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; }
+.tabs::-webkit-scrollbar { display: none; }
+/* A tab's width is set, not left to its title, so every tab takes the same room and they shrink together. */
+.tab { position: relative; display: flex; align-items: center; flex: 0 1 auto; width: 14rem; min-width: 7.5rem; height: 1.875rem; border-radius: var(--radius-sm); transition: background var(--duration-fast); }
+.tab:hover { background: rgb(25 29 22 / 5%); color: var(--color-text-primary); }
+.current, .current:hover { background: var(--color-surface-panel); color: var(--color-text-primary); box-shadow: 0 0 0 1px var(--color-border-subtle), var(--shadow-sm); }
+.tab + .tab::before { content: ''; position: absolute; left: -2px; top: .5rem; bottom: .5rem; width: 1px; background: rgb(25 29 22 / 12%); pointer-events: none; }
+.tab:is(.current, :hover)::before, .tab:is(.current, :hover) + .tab::before { opacity: 0; }
+.tabLink { display: flex; align-items: center; gap: var(--space-2); flex: 1; min-width: 0; height: 100%; padding: 0 var(--space-1) 0 var(--space-3); border-radius: inherit; color: inherit; font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); line-height: 1; text-decoration: none; }
+.tabLink > svg { flex-shrink: 0; color: var(--color-text-muted); }
+.tabTitle { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tabClose, .newTab { flex-shrink: 0; display: grid; place-items: center; padding: 0; border: 0; background: none; color: var(--color-text-muted); }
+.tabClose { width: 1.375rem; height: 1.375rem; margin-right: var(--space-1); border-radius: .375rem; opacity: 0; }
+.tab:is(:hover, :focus-within, .current) .tabClose { opacity: 1; }
+.tabClose:hover { background: rgb(25 29 22 / 7%); color: var(--color-text-primary); }
+.newTab { width: 1.875rem; height: 1.875rem; border-radius: var(--radius-sm); }
+.newTab:hover { background: rgb(25 29 22 / 5%); color: var(--color-text-primary); }
+/* Inside the strip a focus ring stays inside the control: the row scrolls, and would cut off a ring outside it. */
+:is(.tabLink, .tabClose, .newTab):focus-visible { outline-offset: -2px; }
+/* A tab being dragged, and the line where it would land. */
+.dragging { opacity: .45; }
+.dropBefore::after, .dropAfter::after { content: ''; position: absolute; top: .25rem; bottom: .25rem; width: 2px; border-radius: 1px; background: var(--color-accent-solid); pointer-events: none; }
+.dropBefore::after { left: -2px; }
+.dropAfter::after { right: -2px; }
+.visuallyHidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; clip: rect(0, 0, 0, 0); overflow: hidden; white-space: nowrap; border: 0; }
+
+@media (hover: none) {
+  .tabClose { opacity: 1; }
+}
+@media (max-width: 767px) {
+  .tab { width: 11rem; min-width: 6.5rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tab { transition: none; }
+}
+@media print {
+  .strip { display: none; }
+}

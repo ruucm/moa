@@ -5,6 +5,7 @@ import * as DialogPrimitive from '@radix-ui/react-dialog'
 import { Icon, IconButton, Spinner } from '../../components/ui/index.jsx'
 import DocRenderer from '../../components/doc-renderer.jsx'
 import { copyText } from '../../lib/client-store.js'
+import { openTab } from '../../lib/tabs.js'
 import styles from './search.module.css'
 
 const RECENT_LIMIT = 8
@@ -88,8 +89,9 @@ const hrefOf = (item) => `/p/${encodeURIComponent(item.slug)}/${encodeURICompone
 
 // The selected page as it renders: the bundle the reader shows, read-only — the page is inert, so nothing in
 // it takes a click or a key and the palette's own keys keep working. The header copies the page's link or
-// opens it in a new tab; a click on the page opens it, like ↵ on its row.
-function PreviewPane({ item, titleId }) {
+// opens it in a new tab (moa's own, lib/tabs.js; with a modifier key the browser's); a click on the page opens
+// it, like ↵ on its row.
+function PreviewPane({ item, titleId, onOpenTab }) {
   const [copied, setCopied] = useState(false)
   const timer = useRef(null)
   useEffect(() => () => clearTimeout(timer.current), [])
@@ -114,7 +116,12 @@ function PreviewPane({ item, titleId }) {
       </span>
       <span className={styles.previewActions}>
         <IconButton icon={copied ? 'check' : 'link'} label={copied ? 'Link copied' : 'Copy link'} size="sm" onClick={copyLink} />
-        <IconButton icon="arrowUpRight" label="Open in new tab" size="sm" href={href} target="_blank" rel="noopener" />
+        <IconButton icon="arrowUpRight" label="Open in new tab" size="sm" href={href} target="_blank" rel="noopener"
+          onClick={(event) => {
+            if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+            event.preventDefault()
+            onOpenTab(item)
+          }} />
       </span>
     </div>
     <div className={styles.previewBody} data-part="preview-body" role="region" aria-labelledby={titleId} tabIndex={0} onClick={onClick}>
@@ -229,6 +236,12 @@ export default function GlobalSearch({ open, onClose, index, currentSlug = null 
     return () => clearTimeout(timer)
   }, [open, previewShown, activeKey])
 
+  // A page opened in a new tab of moa's (lib/tabs.js) is usually a load away; when it is this very page, the new tab
+  // takes over here, and the search closes on it.
+  const openInTab = (item) => {
+    openTab(hrefOf(item), { title: item.title })
+    onClose?.()
+  }
   const move = (step) => {
     if (!shown.length) return
     scrollToActive.current = true
@@ -241,7 +254,7 @@ export default function GlobalSearch({ open, onClose, index, currentSlug = null 
     else if (event.key === 'Enter' && activeItem) {
       event.preventDefault()
       const href = hrefOf(activeItem)
-      if (event.metaKey || event.ctrlKey) window.open(href, '_blank', 'noopener')
+      if (event.metaKey || event.ctrlKey) openInTab(activeItem)
       else window.location.assign(href)
     }
   }
@@ -306,7 +319,7 @@ export default function GlobalSearch({ open, onClose, index, currentSlug = null 
               : answered ? <p className={styles.status}>No documents match <strong>{trimmed}</strong>.</p>
               : <p className={styles.status}>Searching…</p>)}
           </div>
-          {previewShown && (previewItem ? <PreviewPane key={`${previewItem.slug}/${previewItem.doc}`} item={previewItem} titleId={`${id}-preview-title`} />
+          {previewShown && (previewItem ? <PreviewPane key={`${previewItem.slug}/${previewItem.doc}`} item={previewItem} titleId={`${id}-preview-title`} onOpenTab={openInTab} />
             : <section className={styles.preview} data-part="preview">
               {shown.length === 0 && <div className={styles.previewEmpty}><Icon name="file" size={22} /><span>Nothing to preview</span></div>}
             </section>)}

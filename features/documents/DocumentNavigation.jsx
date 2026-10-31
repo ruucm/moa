@@ -4,6 +4,7 @@ import React, { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } f
 import { createPortal, flushSync } from 'react-dom'
 import { Brand, Icon, IconButton, StatusBadge } from '../../components/ui/index.jsx'
 import { copyText } from '../../lib/client-store.js'
+import { openTab } from '../../lib/tabs.js'
 import { InviteButton } from './DocumentActions.jsx'
 import { SearchButton } from '../search/GlobalSearch.jsx'
 import styles from './reader.module.css'
@@ -463,10 +464,11 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
 
   const pageHref = (entry) => `/p/${encodeURIComponent(project.slug)}/${encodeURIComponent(entry.slug)}`
   // What the browser's own link menu offered before the row's menu took the right click (held with Shift, the right
-  // click still gets it): the page in a new tab, or in a new window — the popup window a page may open, the size of
-  // this one and a little to the side — and its link copied.
+  // click still gets it): the page in a new tab — one of moa's own, in the strip at the top of the window
+  // (lib/tabs.js) — or in a new window — the popup window a page may open, the size of this one and a little to the
+  // side — and its link copied.
   const openPage = (entry, inWindow) => {
-    if (!inWindow) { window.open(pageHref(entry), '_blank', 'noopener'); return }
+    if (!inWindow) { openTab(pageHref(entry), { title: entry.title }); return }
     const width = Math.min(window.outerWidth || 1280, window.screen?.availWidth || 1280)
     const height = Math.min(window.outerHeight || 900, window.screen?.availHeight || 900)
     window.open(pageHref(entry), '_blank', `popup,noopener,width=${width},height=${height},left=${(window.screenX || 0) + 40},top=${(window.screenY || 0) + 40}`)

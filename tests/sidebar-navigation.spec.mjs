@@ -596,18 +596,26 @@ test('the page menu, from a right click or Shift+F10, renames a page or pins it;
   await page.mouse.click(900, 600)
   await expect(menu).toHaveCount(0)
 
-  // Open in new tab, and in new window, open the page elsewhere and leave this one as it is, focus on the link.
+  // Open in new window opens the page in a window of its own and leaves this one as it is, focus on the link.
   const href = `/p/moa-design/${pageSlug('106', 2)}`
-  for (const name of ['Open in new tab', 'Open in new window']) {
-    await still.click({ button: 'right' })
-    const [opened] = await Promise.all([page.context().waitForEvent('page'), menu.getByRole('menuitem', { name, exact: true }).click()])
-    await opened.waitForLoadState('domcontentloaded')
-    expect(new URL(opened.url()).pathname).toBe(href)
-    await opened.close()
-    await expect(menu).toHaveCount(0)
-    expect(new URL(page.url()).pathname).toBe('/p/moa-design/overview')
-    await expect(still).toBeFocused()
-  }
+  await still.click({ button: 'right' })
+  const [opened] = await Promise.all([page.context().waitForEvent('page'), menu.getByRole('menuitem', { name: 'Open in new window', exact: true }).click()])
+  await opened.waitForLoadState('domcontentloaded')
+  expect(new URL(opened.url()).pathname).toBe(href)
+  await opened.close()
+  await expect(menu).toHaveCount(0)
+  expect(new URL(page.url()).pathname).toBe('/p/moa-design/overview')
+  await expect(still).toBeFocused()
+  // Open in new tab opens it in a tab of moa's own, beside this page in the strip at the top of the window
+  // (tests/tabs.spec.mjs). Closing that tab brings this page back on its own.
+  await still.click({ button: 'right' })
+  await menu.getByRole('menuitem', { name: 'Open in new tab', exact: true }).click()
+  await expect(page).toHaveURL(new RegExp(`${href}$`))
+  const tabs = page.getByRole('navigation', { name: 'Tabs', exact: true })
+  await expect(tabs.getByRole('link')).toHaveText(['더 명확하게, 더 편안하게', 'P1 · 스틸'])
+  await tabs.getByRole('button', { name: 'Close P1 · 스틸', exact: true }).click()
+  await expect(page).toHaveURL(/\/p\/moa-design\/overview$/)
+  await expect(tabs).toHaveCount(0)
 
   // Copy link puts the page's address on the clipboard, says so in its place, and the menu closes by itself — with
   // the clipboard API, and without it (the hub is reached over plain http, where there is none) through the old

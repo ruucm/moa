@@ -147,9 +147,9 @@ curl -s -b /tmp/moa.jar -X POST http://localhost:5001/api/pin \
 
 An admin renames a page from its menu — a right click on its row, a long press on a touch screen, or Shift+F10 on
 its link — or with F2 on the link: Enter or leaving the field saves, Esc keeps the old title. The menu also opens
-the page in a new tab or a new window and copies its link (what the browser's own link menu offered before the
-menu took the right click; a right click with Shift held still opens the browser's menu), and pins or archives the
-page. A page dragged onto another group moves into it (or Alt+↑/↓ on its link, one group up or
+the page in a new tab (one of moa's own, see "Tabs" below) or a new window and copies its link (what the browser's
+own link menu offered before the menu took the right click; a right click with Shift held still opens the browser's
+menu), and pins or archives the page. A page dragged onto another group moves into it (or Alt+↑/↓ on its link, one group up or
 down); a closed group opens to show it arrive. Both are saved at once in the page's `.mdx` — its `export const title`
 or `group` literal is rewritten where it stands (a missing group goes on the line after the title) and the rest of the
 file is kept byte for byte — so every open reader sees the change through the usual live reload. The text is kept on
@@ -232,8 +232,8 @@ stdout (NDJSON) — text, tool calls, results. No API key needed (uses the local
 opens one search over every page the reader may open — admins: every project the hub shows; members: their
 invited projects. It finds a page by its title, its group, its project or the words on the page, lists the
 best matches first (the current project's pages ahead of equal matches elsewhere) with the passage around the
-match, and ↑ ↓ ↵ open one (⌘↵ in a new tab). Before anything is typed it lists the pages updated last. The
-sidebar has no filter box of its own any more.
+match, and ↑ ↓ ↵ open one (⌘↵ in a new tab of moa's own, see "Tabs" below). Before anything is typed it lists
+the pages updated last. The sidebar has no filter box of its own any more.
 
 Beside the list, on screens 768px and wider, the selected page is previewed as it renders — the same bundle
 the reader shows (`/api/doc`), read-only: the page is inert, so nothing in it takes a click or a key. The
@@ -249,6 +249,23 @@ curl -s -b /tmp/moa.jar "http://localhost:5001/api/search?q=weekly%20report&from
 `from` is the project the reader is in (ranked up, and searched even if hidden from the hub); `limit` caps the
 results (40 by default, 100 at most); without `q` the response lists the most recently updated pages. The page
 text is read once and kept in memory until the file changes (`lib/search.mjs`).
+
+## Tabs
+
+A page opened in a new tab — Open in new tab in a page's menu, ⌘↵ in the search or the new-tab link of its
+preview — joins a strip of tabs across the top of the window, like a browser's or Notion's. The strip shows only while
+the window holds two tabs or more, and takes no room otherwise. A tab shows its page where the reader left it (its
+scroll position); a page followed in a tab becomes that tab's page; Back and Forward return to the tab a page was
+opened in. The × or a middle click closes a tab (the one on screen gives its place to its neighbour), a tab dragged
+along the strip moves there, + opens the projects in a new tab, and from the keyboard the strip is one stop on the
+tab on screen: the arrow keys go along it and Delete closes a tab. A link clicked with a modifier key still opens a
+browser tab or window.
+
+The tabs are each window's own, kept in its sessionStorage (`moa.tabs`, `lib/tabs.js`): a reload keeps them, and a
+new window — Open in new window, another browser tab, the installed app opened again — starts with its page alone.
+Every page is a full page load, so the strip (`features/tabs/TabStrip.jsx`, in the root layout) renders once the page
+has loaded, into room a script in the page's head made before the first paint (`html[data-tabs]`). A sticky part of a
+page sticks under the strip with `top: var(--moa-tabs-h)` (0 without the strip).
 
 ## Agent contract (publishing reports)
 

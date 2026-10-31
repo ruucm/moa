@@ -1,5 +1,16 @@
 * { box-sizing: border-box; }
-html { color-scheme: light; scroll-padding-top: 5rem; }
+/* While a window holds two tabs or more, its tab strip (features/tabs) is fixed over the top of the page and the page
+   starts under it: `data-tabs` is set before the first paint (app/layout.jsx), and until the strip renders its place
+   shows as an empty bar. A sticky part of a page sticks under the strip (`--moa-tabs-h`). */
+:root { --moa-tabs-size: 2.5rem; --moa-tabs-h: 0px; }
+html[data-tabs] { --moa-tabs-h: var(--moa-tabs-size); }
+html[data-tabs] body { padding-top: var(--moa-tabs-h); }
+html[data-tabs] body::before { content: ''; position: fixed; inset: 0 0 auto; z-index: var(--z-sticky); height: var(--moa-tabs-h); border-bottom: 1px solid var(--color-border-subtle); background: var(--color-surface-subtle); }
+@media print {
+  html[data-tabs] { --moa-tabs-h: 0px; }
+  html[data-tabs] body::before { display: none; }
+}
+html { color-scheme: light; scroll-padding-top: calc(5rem + var(--moa-tabs-h)); }
 body { margin: 0; background: var(--color-surface-page); color: var(--color-text-primary); font-family: var(--font-sans); font-size: var(--font-size-base); line-height: var(--line-height-ui); word-break: keep-all; overflow-wrap: anywhere; -webkit-font-smoothing: antialiased; }
 button, input, textarea, select { font: inherit; color: inherit; }
 button, a, input, textarea, select { -webkit-tap-highlight-color: transparent; }
