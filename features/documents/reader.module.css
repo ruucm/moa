@@ -65,6 +65,7 @@
 .pageMenuItem > svg { flex-shrink: 0; color: var(--color-text-muted); }
 .pageMenuItem:hover, .pageMenuItem:focus-visible { background: var(--color-surface-subtle); outline: none; }
 .pageMenuKey { margin-left: auto; padding-left: var(--space-4); color: var(--color-text-muted); font: inherit; font-size: var(--font-size-xs); }
+.pageMenuRule { height: 1px; margin: var(--space-1) var(--space-2); background: var(--color-border-subtle); }
 /* A page dragged to another group, and the group it would join. */
 .draggingPage { opacity: .4; }
 .dropInto { border-radius: var(--radius-sm); background: var(--color-accent-subtle); }

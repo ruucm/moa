@@ -3,6 +3,7 @@
 import React, { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal, flushSync } from 'react-dom'
 import { Brand, Icon, IconButton, StatusBadge } from '../../components/ui/index.jsx'
+import { copyText } from '../../lib/client-store.js'
 import { InviteButton } from './DocumentActions.jsx'
 import { SearchButton } from '../search/GlobalSearch.jsx'
 import styles from './reader.module.css'
@@ -120,6 +121,9 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
   const menuRef = useRef(null)
   const menuLink = useRef(null)
   const longPress = useRef(null)
+  // The menu's Copy link item says the link is copied for a moment before the menu closes.
+  const [copied, setCopied] = useState(false)
+  const menuTimer = useRef(null)
   const movedPage = useRef(null)
   const navRef = useRef(null)
   const openedGroup = useRef(null)
@@ -371,12 +375,16 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
     const row = event.currentTarget
     const rect = row.getBoundingClientRect()
     const atPointer = event.clientX || event.clientY
+    clearTimeout(menuTimer.current)
+    setCopied(false)
     menuLink.current = row
     setMenu({ ...target, x: atPointer ? event.clientX : rect.left + 24, y: atPointer ? event.clientY : rect.bottom - 6 })
   }
   const closeMenu = (toLink) => {
     const link = menuLink.current
     menuLink.current = null
+    clearTimeout(menuTimer.current)
+    setCopied(false)
     setMenu(null)
     if (toLink && link?.isConnected) link.focus()
   }
@@ -416,9 +424,15 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
     else if (event.key === 'End') go(-1)
     else if (event.key === 'Escape' || event.key === 'Tab') { event.preventDefault(); closeMenu(true) }
   }
-  // On a touch screen the menu opens on a long press (half a second, without moving); the tap that ends the press
-  // does not open the page.
-  const stopPress = () => { clearTimeout(longPress.current?.timer); if (longPress.current?.timer) longPress.current = null }
+  // On a touch screen the menu opens on a long press (half a second, without moving), beside the finger. The tap
+  // that ends the press is not a click on the page, nor on the menu item that may have come up under the finger:
+  // that click follows the lift at once, and after it clicks count again.
+  const stopPress = () => {
+    const press = longPress.current
+    clearTimeout(press?.timer)
+    if (press?.timer) longPress.current = null
+    else if (press?.fired) setTimeout(() => { if (longPress.current === press) longPress.current = null }, 400)
+  }
   const pressHandlers = (target) => ({
     onPointerDown: (event) => {
       stopPress()
@@ -428,7 +442,7 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
       const { clientX, clientY } = event
       longPress.current = { x: clientX, y: clientY, timer: setTimeout(() => {
         longPress.current = { fired: true }
-        openMenu({ currentTarget: row, clientX, clientY }, target)
+        openMenu({ currentTarget: row, clientX: clientX + 12, clientY: clientY + 12 }, target)
       }, 500) }
     },
     onPointerMove: (event) => {
@@ -446,6 +460,28 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
     return true
   }
   const followLink = (event) => { if (!afterPress(event)) onNavigate?.(event) }
+
+  const pageHref = (entry) => `/p/${encodeURIComponent(project.slug)}/${encodeURIComponent(entry.slug)}`
+  // What the browser's own link menu offered before the row's menu took the right click (held with Shift, the right
+  // click still gets it): the page in a new tab, or in a new window — the popup window a page may open, the size of
+  // this one and a little to the side — and its link copied.
+  const openPage = (entry, inWindow) => {
+    if (!inWindow) { window.open(pageHref(entry), '_blank', 'noopener'); return }
+    const width = Math.min(window.outerWidth || 1280, window.screen?.availWidth || 1280)
+    const height = Math.min(window.outerHeight || 900, window.screen?.availHeight || 900)
+    window.open(pageHref(entry), '_blank', `popup,noopener,width=${width},height=${height},left=${(window.screenX || 0) + 40},top=${(window.screenY || 0) + 40}`)
+  }
+  const copyLink = async (entry) => {
+    const ok = await copyText(new URL(pageHref(entry), window.location.href).href, { promptFallback: false })
+    if (!ok) {
+      closeMenu(true)
+      setOrderError('Could not copy the link.')
+      return
+    }
+    setCopied(true)
+    clearTimeout(menuTimer.current)
+    menuTimer.current = setTimeout(() => closeMenu(true), 900)
+  }
 
   // Archives a page or a whole group, or brings it back. The change shows at once and is saved in the registry for
   // everyone; it is undone if the save fails. Focus follows: to the Archived group the row went into, or to the row
@@ -540,7 +576,7 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
         onDragEnd: endDrag,
       }),
       ...pressHandlers(target),
-      onContextMenu: (event) => openMenu(event, target),
+      onContextMenu: (event) => { if (!event.shiftKey) openMenu(event, target) },
       onKeyDown: (event) => {
         if ((event.key === 'F10' && event.shiftKey) || event.key === 'ContextMenu') {
           event.preventDefault()
@@ -578,7 +614,7 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
         onDragEnd: endDrag,
         'aria-describedby': `${id}-reorder`,
       }),
-      ...(editable && { ...pressHandlers(target), onContextMenu: (event) => openMenu(event, target) }),
+      ...(editable && { ...pressHandlers(target), onContextMenu: (event) => { if (!event.shiftKey) openMenu(event, target) } }),
       ...((orderable || editable) && { 'aria-keyshortcuts': [orderable && 'Alt+ArrowUp Alt+ArrowDown', editable && 'Shift+F10'].filter(Boolean).join(' ') }),
       onKeyDown: (event) => {
         if (editable && ((event.key === 'F10' && event.shiftKey) || event.key === 'ContextMenu')) {
@@ -621,7 +657,7 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
     )
     return (
       <div key={entry.slug} className={`${styles.documentRow} ${authed && !archived ? styles.pinnableRow : ''} ${editable ? styles.editableRow : ''} ${pinned ? styles.pinnedRow : ''} ${archived ? styles.archivedRow : ''} ${draggedPage === entry.slug ? styles.draggingPage : ''} ${menu?.kind === 'page' && menu.entry.slug === entry.slug && (menu.index !== undefined) === inPinned ? styles.menuRow : ''}`}>
-        <a href={`/p/${encodeURIComponent(project.slug)}/${encodeURIComponent(entry.slug)}`} data-doc={entry.slug}
+        <a href={pageHref(entry)} data-doc={entry.slug}
           className={`${styles.documentLink} ${entry.slug === doc?.slug ? styles.currentDocument : ''}`}
           aria-current={entry.slug === doc?.slug ? 'page' : undefined} onClick={followLink} {...pageHandlers(entry, inPinned, index, archived)}>
           <Icon name="file" size={16} />
@@ -685,6 +721,7 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
       {reorderable && <p id={`${id}-reorder`} className={styles.visuallyHidden}>Drag a group, or press Alt with the up or down arrow, to change the group order for everyone.</p>}
       {editable && <p id={`${id}-edit`} className={styles.visuallyHidden}>{movable ? 'Drag a page onto another group, or press Alt with the up or down arrow, to move it there. ' : ''}Press F2 to rename a page, or Shift+F10 for its menu, which also archives it. Shift+F10 on a group opens the group's menu.</p>}
       {orderError && <p className={styles.navigationError} role="alert">{orderError}</p>}
+      <span className={styles.visuallyHidden} role="status">{copied ? 'Link copied' : ''}</span>
       <nav className={styles.documentNavigation} ref={navRef} aria-label="Project documents" {...listDragHandlers}>
         {groups.length === 0 && <p className={styles.navigationEmpty}>No documents yet.</p>}
         {pinnedPages.length > 0 && <div className={`${styles.documentGroup} ${styles.pinnedGroup}`}>
@@ -736,7 +773,22 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
         </div>}
       </nav>
       {menu && createPortal(
-        <div ref={menuRef} className={styles.pageMenu} role="menu" aria-label={menu.kind === 'group' ? menu.name : menu.entry.title} onKeyDown={menuKeys}>
+        <div ref={menuRef} className={styles.pageMenu} role="menu" aria-label={menu.kind === 'group' ? menu.name : menu.entry.title} onKeyDown={menuKeys}
+          onClickCapture={(event) => { if (afterPress(event)) event.stopPropagation() }}>
+          {menu.kind === 'page' && <>
+            <button type="button" role="menuitem" className={styles.pageMenuItem}
+              onClick={() => { const { entry } = menu; closeMenu(true); openPage(entry, false) }}>
+              <Icon name="arrowUpRight" size={14} /><span>Open in new tab</span>
+            </button>
+            <button type="button" role="menuitem" className={styles.pageMenuItem}
+              onClick={() => { const { entry } = menu; closeMenu(true); openPage(entry, true) }}>
+              <Icon name="window" size={14} /><span>Open in new window</span>
+            </button>
+            <button type="button" role="menuitem" className={styles.pageMenuItem} onClick={() => { if (!copied) copyLink(menu.entry) }}>
+              <Icon name={copied ? 'check' : 'link'} size={14} /><span>{copied ? 'Link copied' : 'Copy link'}</span>
+            </button>
+            <div role="separator" className={styles.pageMenuRule} />
+          </>}
           {menu.kind === 'page' && <button type="button" role="menuitem" className={styles.pageMenuItem}
             onClick={() => { const { entry, index } = menu; closeMenu(false); startRename(entry, index !== undefined) }}>
             <Icon name="edit" size={14} /><span>Rename</span><kbd className={styles.pageMenuKey} aria-hidden="true">F2</kbd>

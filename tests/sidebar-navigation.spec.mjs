@@ -548,14 +548,15 @@ test('the page menu, from a right click or Shift+F10, renames a page or pins it;
   const menu = page.getByRole('menu', { name: 'P1 · 스틸', exact: true })
   const near = (a, b) => Math.abs(a - b) <= 1
 
-  // Nothing but the pin shows on the row. A right click opens the menu where the pointer is.
+  // Nothing but the pin shows on the row. A right click opens the menu where the pointer is: what the browser's
+  // link menu offers first, then the page's own actions.
   await still.hover()
   await expect(navigation.getByRole('button', { name: /^Rename / })).toHaveCount(0)
   await expect(menu).toHaveCount(0)
   await still.click({ button: 'right' })
   await expect(menu).toBeVisible()
-  await expect(menu.getByRole('menuitem', { name: 'Rename', exact: true })).toBeFocused()
-  await expect(menu.getByRole('menuitem', { name: 'Pin to the top', exact: true })).toBeVisible()
+  await expect(menu.getByRole('menuitem')).toHaveText(['Open in new tab', 'Open in new window', 'Copy link', 'RenameF2', 'Pin to the top', 'Archive'])
+  await expect(menu.getByRole('menuitem', { name: 'Open in new tab', exact: true })).toBeFocused()
   const [panel, target] = await Promise.all([rect(menu), rect(still)])
   expect(near(panel.left, target.left + target.width / 2) && near(panel.top, target.top + target.height / 2)).toBe(true)
   // Escape closes it, with focus back on the link.
@@ -563,21 +564,26 @@ test('the page menu, from a right click or Shift+F10, renames a page or pins it;
   await expect(menu).toHaveCount(0)
   await expect(still).toBeFocused()
 
+  // With Shift held, a right click is left to the browser's own menu.
+  await still.click({ button: 'right', modifiers: ['Shift'] })
+  await page.waitForTimeout(300)
+  await expect(menu).toHaveCount(0)
+
   // Shift+F10 opens it by the link; the arrow keys move through it, around its ends, and Enter pins the page.
+  await still.focus()
   await page.keyboard.press('Shift+F10')
-  await expect(menu.getByRole('menuitem', { name: 'Rename', exact: true })).toBeFocused()
+  await expect(menu.getByRole('menuitem', { name: 'Open in new tab', exact: true })).toBeFocused()
   const byLink = await rect(menu)
   expect(byLink.left).toBeGreaterThan(target.left)
   expect(byLink.left).toBeLessThan(target.right)
   expect(byLink.top).toBeGreaterThan(target.top)
-  await page.keyboard.press('ArrowDown')
-  await expect(menu.getByRole('menuitem', { name: 'Pin to the top', exact: true })).toBeFocused()
-  await page.keyboard.press('ArrowDown')
+  await page.keyboard.press('End')
   await expect(menu.getByRole('menuitem', { name: 'Archive', exact: true })).toBeFocused()
   await page.keyboard.press('ArrowDown')
-  await expect(menu.getByRole('menuitem', { name: 'Rename', exact: true })).toBeFocused()
-  await page.keyboard.press('End')
+  await expect(menu.getByRole('menuitem', { name: 'Open in new tab', exact: true })).toBeFocused()
   await page.keyboard.press('ArrowUp')
+  await page.keyboard.press('ArrowUp')
+  await expect(menu.getByRole('menuitem', { name: 'Pin to the top', exact: true })).toBeFocused()
   await page.keyboard.press('Enter')
   await expect(menu).toHaveCount(0)
   await expect.poll(() => pinnedTitles(navigation)).toEqual(['P1 · 스틸'])
@@ -588,6 +594,40 @@ test('the page menu, from a right click or Shift+F10, renames a page or pins it;
   await still.click({ button: 'right' })
   await expect(menu.getByRole('menuitem', { name: 'Unpin', exact: true })).toBeVisible()
   await page.mouse.click(900, 600)
+  await expect(menu).toHaveCount(0)
+
+  // Open in new tab, and in new window, open the page elsewhere and leave this one as it is, focus on the link.
+  const href = `/p/moa-design/${pageSlug('106', 2)}`
+  for (const name of ['Open in new tab', 'Open in new window']) {
+    await still.click({ button: 'right' })
+    const [opened] = await Promise.all([page.context().waitForEvent('page'), menu.getByRole('menuitem', { name, exact: true }).click()])
+    await opened.waitForLoadState('domcontentloaded')
+    expect(new URL(opened.url()).pathname).toBe(href)
+    await opened.close()
+    await expect(menu).toHaveCount(0)
+    expect(new URL(page.url()).pathname).toBe('/p/moa-design/overview')
+    await expect(still).toBeFocused()
+  }
+
+  // Copy link puts the page's address on the clipboard, says so in its place, and the menu closes by itself — with
+  // the clipboard API, and without it (the hub is reached over plain http, where there is none) through the old
+  // copy command.
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
+  await still.click({ button: 'right' })
+  await menu.getByRole('menuitem', { name: 'Copy link', exact: true }).click()
+  await expect(menu.getByRole('menuitem', { name: 'Link copied', exact: true })).toBeVisible()
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(new URL(href, page.url()).href)
+  await expect(menu).toHaveCount(0)
+  await expect(still).toBeFocused()
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true })
+    document.execCommand = (command) => { window.__copied = command === 'copy' ? document.activeElement?.value : null; return true }
+  })
+  await page.reload()
+  await still.click({ button: 'right' })
+  await menu.getByRole('menuitem', { name: 'Copy link', exact: true }).click()
+  await expect(menu.getByRole('menuitem', { name: 'Link copied', exact: true })).toBeVisible()
+  expect(await page.evaluate(() => window.__copied)).toBe(new URL(href, page.url()).href)
   await expect(menu).toHaveCount(0)
 
   // Rename opens the title in its field; leaving the field saves it.
@@ -658,8 +698,7 @@ test('a page or a whole group is archived from its menu into an Archived group a
   await expect(archivedLink).toBeVisible()
   await expect(archivedGroup.getByRole('button', { name: /^Pin / })).toHaveCount(0)
   const menu = await menuOf(archivedLink, 'P1 · 스틸')
-  await expect(menu.getByRole('menuitem')).toHaveCount(2)
-  await expect(menu.getByRole('menuitem', { name: 'Unarchive', exact: true })).toBeVisible()
+  await expect(menu.getByRole('menuitem')).toHaveText(['Open in new tab', 'Open in new window', 'Copy link', 'RenameF2', 'Unarchive'])
   await page.keyboard.press('Escape')
   await page.reload()
   await expect(archivedToggle).toHaveText('Archived1')

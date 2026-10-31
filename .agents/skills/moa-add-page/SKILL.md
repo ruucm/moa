@@ -42,7 +42,8 @@ Body…
   come first and a new group follows them, by `order`. Each reader's pinned pages (`pins.json`) also show
   in their own Pinned group above all groups; a pin goes by the file name, so renaming a file unpins it
 - An admin can rename a page or move it to another group from the sidebar (the row's right-click menu or F2, or a
-  drag onto the group).
+  drag onto the group). That menu also opens the page in a new tab or window and copies its link; Shift + right
+  click still gives the browser's own menu.
   That rewrites the `title` / `group` literal in the file, so read the page again before you rewrite it — a page
   written from a stale copy puts the old title and group back
 - An admin can also archive a page or a whole group from the sidebar (its menu): the file stays and still opens, it is
