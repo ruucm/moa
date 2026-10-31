@@ -229,6 +229,9 @@
   .headerActions { gap: 0; }
   .aiLabel { display: none; }
   .documentLayout { display: block; padding: var(--space-8) var(--space-5) var(--space-5); }
+  /* A page's own component wider than the screen (a line that may not wrap, a fixed-width figure) is cut at the
+     column's edge instead of pushing the whole page sideways, which would cut every line of text. */
+  .documentMain { overflow-x: clip; }
   .documentMeta { margin-bottom: var(--space-4); }
   .documentFooter { margin-top: var(--space-16); }
   .refreshError { margin: var(--space-4) var(--space-5) 0; }

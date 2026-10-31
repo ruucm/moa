@@ -9,7 +9,24 @@
 .updated { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-block: var(--space-4); color: var(--color-text-muted); font-size: var(--font-size-xs); }
 .updated span { color: var(--color-text-secondary); font-variant-numeric: tabular-nums; }
 .dataTable { margin-block: var(--space-6); min-width: 0; }
-.tableScroll { max-width: 100%; margin-block: var(--space-6); overflow-x: auto; border: 1px solid var(--color-border-subtle); border-radius: var(--radius-md); background: var(--color-surface-panel); overscroll-behavior-inline: contain; }
+.tableScroll { container-type: inline-size; max-width: 100%; margin-block: var(--space-6); overflow-x: auto; border: 1px solid var(--color-border-subtle); border-radius: var(--radius-md); background: var(--color-surface-panel); overscroll-behavior-inline: contain; }
+/* Under 40rem of width — a phone, a narrow column — a column of long text keeps room to wrap in readable lines (the
+   table's `--col-N`, see index.jsx): the table grows past its box and scrolls sideways instead of being squeezed to
+   a word a line. Wider, every column takes its natural share. */
+@container (max-width: 40rem) {
+  .table :is(th, td):nth-child(1) { min-width: var(--col-1, 0); }
+  .table :is(th, td):nth-child(2) { min-width: var(--col-2, 0); }
+  .table :is(th, td):nth-child(3) { min-width: var(--col-3, 0); }
+  .table :is(th, td):nth-child(4) { min-width: var(--col-4, 0); }
+  .table :is(th, td):nth-child(5) { min-width: var(--col-5, 0); }
+  .table :is(th, td):nth-child(6) { min-width: var(--col-6, 0); }
+  .table :is(th, td):nth-child(7) { min-width: var(--col-7, 0); }
+  .table :is(th, td):nth-child(8) { min-width: var(--col-8, 0); }
+  .table :is(th, td):nth-child(9) { min-width: var(--col-9, 0); }
+  .table :is(th, td):nth-child(10) { min-width: var(--col-10, 0); }
+  .table :is(th, td):nth-child(11) { min-width: var(--col-11, 0); }
+  .table :is(th, td):nth-child(12) { min-width: var(--col-12, 0); }
+}
 .dataTable .tableScroll { margin-block: 0; }
 .tableScroll:focus-visible { outline: 2px solid var(--color-focus, var(--color-accent-text)); outline-offset: 3px; }
 .table { display: table; overflow: visible; width: 100%; margin: 0; border-collapse: separate; border-spacing: 0; color: var(--color-text-secondary); font-size: var(--font-size-sm); line-height: 1.65; }
@@ -54,7 +71,8 @@
 .checkDone { color: var(--color-text-secondary); }
 .checkDone .checkIcon { color: var(--color-success-text, var(--color-text-primary)); border-color: var(--color-success-border, var(--color-border-subtle)); background: var(--color-success-surface, var(--color-surface-subtle)); }
 .footerNote { margin-top: var(--space-12); padding-top: var(--space-6); border-top: 1px solid var(--color-border-subtle); color: var(--color-text-muted); font-size: var(--font-size-xs); line-height: 1.8; white-space: pre-line; }
-.badge { display: inline-flex; align-items: center; gap: var(--space-1); width: fit-content; max-width: 100%; padding: var(--space-1) var(--space-2); border-radius: var(--radius-sm); color: var(--tone-text, var(--color-text-secondary)); background: var(--tone-surface, var(--color-surface-subtle)); font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); line-height: 1.4; white-space: nowrap; vertical-align: middle; }
+.badge { display: inline-flex; align-items: center; gap: var(--space-1); width: fit-content; max-width: 100%; padding: var(--space-1) var(--space-2); border-radius: var(--radius-sm); color: var(--tone-text, var(--color-text-secondary)); background: var(--tone-surface, var(--color-surface-subtle)); font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); line-height: 1.4; vertical-align: middle; }
+/* A badge is a word or two; given a sentence it wraps inside its column instead of running off a phone's screen. */
 .success { --tone-text: var(--color-success-text, var(--color-text-primary)); --tone-surface: var(--color-success-surface, var(--color-surface-subtle)); --tone-border: var(--color-success-border, var(--color-border-subtle)); }
 .warning { --tone-text: var(--color-warning-text, var(--color-accent-text)); --tone-surface: var(--color-warning-surface, var(--color-accent-subtle)); --tone-border: var(--color-warning-border, var(--color-border-subtle)); }
 .danger { --tone-text: var(--color-danger-text, var(--color-accent-text)); --tone-surface: var(--color-danger-surface, var(--color-accent-subtle)); --tone-border: var(--color-danger-border, var(--color-border-subtle)); }

@@ -391,3 +391,88 @@ test('Korean table words stay intact instead of breaking between syllables', asy
   expect(brokenWords).toEqual([])
   await noOverflow(page)
 })
+
+// A column of long text is the one a phone squeezes: a word a line, rows a screen tall. It keeps room to wrap in
+// readable lines instead, and the table scrolls sideways in its box. On a wide screen the columns share the width
+// as before.
+test('a column of long text keeps readable lines on a phone while the table scrolls sideways in its box', async ({ page }) => {
+  await login(page)
+  const flow = '시작하며(무료 · 재연 · 루움 합본) → 설치 · 파일 정리 → Files 마크다운 · 레시피 · 썸네일 → Internet 플레이라이트 · 네이버 · 인스타 · 쿠팡 → 네이버 블로그 한 편(콘텐츠 팀장 · 7단계) · 합 2시간 3분'
+  await page.route('**/api/doc?slug=moa-design&doc=overview', route => route.fulfill({ json: { code: `
+    const React = require('react');
+    const {useMDXComponents} = require('@mdx-js/react');
+    module.exports.default = function WideTable() {
+      const {table: Table, DataTable} = useMDXComponents();
+      const row = (...cells) => React.createElement('tr', null, ...cells.map((cell, i) => React.createElement(i ? 'td' : 'th', null, cell)));
+      return React.createElement(React.Fragment, null,
+        React.createElement('h1', null, '긴 칸이 있는 표'),
+        React.createElement(Table, null,
+          React.createElement('thead', null, row('주차', '도구 → 직원', '공개 · 강', '데려가는 직원', '흐름')),
+          React.createElement('tbody', null,
+            row('1주', 'Files · Internet → 콘텐츠 팀장', '10/23–24 (약속 10/22) · 01–05', '콘텐츠 팀장 v1 (블로그 · 키트)', ${JSON.stringify(flow)}),
+            row('2주 (초안)', 'Files 심화 · 스킬 → 디자인', '10/29(목) · 06–11', '디자인', ${JSON.stringify(flow)}))),
+        React.createElement(DataTable, { cols: ['강', '흐름'], rows: [['06', ${JSON.stringify(flow)}], ['07', '짧은 줄']] }));
+    }` } }))
+  const lines = locator => locator.evaluate(el => {
+    const range = globalThis.document.createRange()
+    range.selectNodeContents(el)
+    return new Set([...range.getClientRects()].map(rect => Math.round(rect.top))).size
+  })
+  const width = locator => locator.evaluate(el => el.getBoundingClientRect().width)
+  const scrolls = locator => locator.evaluate(el => el.scrollWidth > el.clientWidth + 1)
+
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('/p/moa-design/overview')
+  await expect(page.getByRole('heading', { name: '긴 칸이 있는 표' })).toBeVisible()
+  await page.evaluate(() => globalThis.document.fonts.ready)
+  const markdown = page.getByRole('region', { name: 'Document table' })
+  const flowCell = markdown.locator('tbody tr').first().locator('td').nth(3)
+  expect(await width(flowCell)).toBeGreaterThanOrEqual(240)
+  expect(await lines(flowCell)).toBeLessThanOrEqual(9)
+  expect(await scrolls(markdown)).toBe(true)
+  // The short first column keeps its own width.
+  expect(await width(markdown.locator('tbody tr').first().locator('th'))).toBeLessThan(120)
+  const data = page.getByRole('region', { name: 'Data table' })
+  expect(await width(data.locator('tbody tr').first().locator('td').first())).toBeGreaterThanOrEqual(240)
+  expect(await lines(data.locator('tbody tr').first().locator('td').first())).toBeLessThanOrEqual(9)
+  await noOverflow(page)
+
+  // On a wide screen the table fits its column, every column sharing the width.
+  await page.setViewportSize({ width: 1440, height: 1000 })
+  await page.reload()
+  await expect(page.getByRole('heading', { name: '긴 칸이 있는 표' })).toBeVisible()
+  await page.evaluate(() => globalThis.document.fonts.ready)
+  expect(await scrolls(markdown)).toBe(false)
+  expect(await width(flowCell)).toBeGreaterThan(252)
+})
+
+test('a page component wider than a phone screen is cut at the column instead of pushing the page sideways', async ({ page }) => {
+  await login(page)
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.route('**/api/doc?slug=moa-design&doc=overview', route => route.fulfill({ json: { code: `
+    const React = require('react');
+    const {useMDXComponents} = require('@mdx-js/react');
+    module.exports.default = function WideLine() {
+      const {Badge} = useMDXComponents();
+      return React.createElement(React.Fragment, null,
+        React.createElement('h1', null, '넓은 부품'),
+        React.createElement('p', null, '본문은 제자리에 있다.'),
+        React.createElement('div', { style: { display: 'flex' } },
+          React.createElement('span', { style: { whiteSpace: 'nowrap' } }, '01 약속 「앱 개발 담당(쇼핑몰 · 웹사이트)」 · 10/28 루움 「더 추가될 예정」 · 줄바꿈이 없는 긴 글줄')),
+        React.createElement('p', null, React.createElement(Badge, null, '회차 4/4 · 다시 돌림 cc-trend 2회, cc-momentum 1회 · 사진으로 확인한 긴 배지 글')));
+    }` } }))
+  await page.goto('/p/moa-design/overview')
+  await expect(page.getByRole('heading', { name: '넓은 부품' })).toBeVisible()
+  const right = locator => locator.evaluate(el => el.getBoundingClientRect().right)
+  expect(await right(page.getByText('줄바꿈이 없는 긴 글줄'))).toBeGreaterThan(390)
+  expect(await page.evaluate(() => globalThis.document.documentElement.scrollWidth)).toBe(390)
+  await noOverflow(page)
+  // The text around it stays where it is, in full.
+  const paragraph = page.getByText('본문은 제자리에 있다.')
+  expect(await paragraph.evaluate(el => el.getBoundingClientRect().left)).toBeGreaterThanOrEqual(16)
+  expect(await right(paragraph)).toBeLessThanOrEqual(390)
+  // A badge given a sentence wraps inside the column instead of running off the screen.
+  const badge = page.getByText('사진으로 확인한 긴 배지 글')
+  expect(await right(badge)).toBeLessThanOrEqual(390)
+  expect(await badge.evaluate(el => el.getBoundingClientRect().height)).toBeGreaterThan(30)
+})

@@ -15,10 +15,45 @@ export function Updated({ at }) {
   return <div className={styles.updated}>Last updated: <span>{at}</span></div>
 }
 
-export function MarkdownTable({ children, className, ...props }) {
+// The text of a cell as it reads: strings and numbers, and whatever is inside an element.
+const textOf = (node) => node == null || typeof node === 'boolean' ? ''
+  : typeof node === 'string' || typeof node === 'number' ? String(node)
+  : Array.isArray(node) ? node.map(textOf).join('')
+  : React.isValidElement(node) ? textOf(node.props.children) : ''
+// About how wide a text is, in em: a CJK character takes an em, a Latin letter about half, a space less.
+const cjk = /[ᄀ-ᇿ⺀-꓏가-퟿豈-﫿︰-﹏＀-￯]/
+const emOf = (text) => [...text].reduce((width, char) => width + (cjk.test(char) ? 1 : char === ' ' ? .3 : .56), 0)
+// On a narrow screen a column of long text keeps room to wrap in readable lines, so the table grows past its box
+// and scrolls sideways instead of being squeezed to a word a line (report.module.css, under 40rem): the table's
+// `--col-N` is the least width, in the table's em, of the Nth column's cells when their text runs past 8em: a
+// column of a few words gets 9–14em (its lines wrap in two or three), a column of running text 18em. A short
+// column keeps its own width. (A <col> width would not do: a table already wider than its box gives every column
+// its narrowest fit and ignores it.)
+const columnWidths = (rows) => {
+  const widest = []
+  for (const cells of rows) cells.forEach((cell, index) => { widest[index] = Math.max(widest[index] || 0, emOf(textOf(cell))) })
+  const style = {}
+  widest.forEach((em, index) => { if (em >= 8) style[`--col-${index + 1}`] = `${em >= 40 ? 18 : Math.min(14, Math.max(9, Math.ceil(em * .7) + 1))}em` })
+  return style
+}
+// The cells of a Markdown table's body rows. The header row never wraps, so it sets its own width.
+const bodyRows = (children) => {
+  const rows = []
+  const visit = (node) => {
+    for (const child of React.Children.toArray(node)) {
+      if (!React.isValidElement(child) || child.type === 'thead') continue
+      if (child.type === 'tr') rows.push(React.Children.toArray(child.props.children).filter(React.isValidElement))
+      else visit(child.props.children)
+    }
+  }
+  visit(children)
+  return rows
+}
+
+export function MarkdownTable({ children, className, style, ...props }) {
   return (
     <div className={styles.tableScroll} tabIndex={0} role="region" aria-label={props['aria-label'] || 'Document table'}>
-      <table {...props} className={cx(styles.table, className)}>{children}</table>
+      <table {...props} className={cx(styles.table, className)} style={{ ...columnWidths(bodyRows(children)), ...style }}>{children}</table>
     </div>
   )
 }
@@ -47,7 +82,7 @@ export function DataTable({ cols = [], rows = [], note }) {
   return (
     <div className={styles.dataTable}>
       <div className={styles.tableScroll} tabIndex={0} role="region" aria-label="Data table">
-        <table className={styles.table} aria-describedby={note ? noteId : undefined}>
+        <table className={styles.table} style={columnWidths(rows)} aria-describedby={note ? noteId : undefined}>
           <thead><tr>{cols.map((col, index) => <th scope="col" key={index} className={numericColumns[index] ? styles.numeric : undefined}>{col}</th>)}</tr></thead>
           <tbody>
             {rows.map((row, rowIndex) => (

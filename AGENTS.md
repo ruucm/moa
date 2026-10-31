@@ -279,6 +279,10 @@ text is read once and kept in memory until the file changes (`lib/search.mjs`).
    `minWidth: 380` → `minWidth: 'min(380px, 100%)'` ·
    fixed 3-col (`230px 1fr 74px`) → `minmax(0, min(230px, 40%)) minmax(0, 1fr) 56px`.
    Tables are auto-wrapped in a horizontal scroll box (`.table-wrap`) — use them as-is.
+   Markdown tables and `DataTable` size their columns for a narrow screen: under 40rem a column of
+   long text keeps 10–18em so its lines stay readable and the table scrolls sideways in its box.
+   A component wider than a phone screen is cut at the column's edge rather than pushing the whole
+   page sideways — so a `white-space: nowrap` line longer than ~350px is cut there; let it wrap.
 
 ## Shared components (no import needed — injected via MDXProvider)
 
