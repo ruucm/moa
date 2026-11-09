@@ -61,6 +61,12 @@
 .renameForm > svg { flex-shrink: 0; color: var(--color-text-muted); }
 .renameInput { flex: 1; min-width: 0; min-height: 36px; padding: var(--space-1) var(--space-2); border: 0; border-radius: var(--radius-sm); background: var(--color-surface-panel); box-shadow: inset 0 0 0 1px var(--color-border-subtle); color: var(--color-text-primary); font: inherit; font-size: var(--font-size-sm); line-height: 1.55; }
 .renameInput:focus-visible { outline: none; box-shadow: inset 0 0 0 1px var(--color-border-control); }
+/* A page outside any group, put into a new group from its menu: the group's name is typed above the page, in a field
+   in the shape of a group's heading — its caret where a heading's is, and its type. */
+.newGroup { margin: var(--space-2) 0; }
+.newGroupForm { display: flex; align-items: center; gap: var(--space-2); min-height: 44px; padding: 0 var(--space-1) 0 var(--space-3); color: var(--color-text-muted); }
+.newGroupForm > .groupCaret { margin-top: 0; }
+.groupNameInput { font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); }
 /* An admin's page menu — a right click, a long press, or Shift+F10 on the link — renames the page or pins it. */
 .pageMenu { position: fixed; z-index: var(--z-menu); min-width: 11rem; padding: var(--space-1); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-md); background: var(--color-surface-panel); box-shadow: var(--shadow-md); }
 .pageMenuItem { display: flex; align-items: center; gap: var(--space-3); width: 100%; min-height: 34px; padding: 0 var(--space-3); border: 0; border-radius: var(--radius-sm); background: none; color: var(--color-text-primary); font: inherit; font-size: var(--font-size-sm); line-height: 1.4; text-align: left; cursor: pointer; }

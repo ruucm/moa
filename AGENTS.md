@@ -150,7 +150,11 @@ its link — or with F2 on the link: Enter or leaving the field saves, Esc keeps
 the page in a new tab (one of moa's own, see "Tabs" below) or a new window and copies its link (what the browser's
 own link menu offered before the menu took the right click; a right click with Shift held still opens the browser's
 menu), and pins or archives the page. A page dragged onto another group moves into it (or Alt+↑/↓ on its link, one group up or
-down); a closed group opens to show it arrive. Both are saved at once in the page's `.mdx` — its `export const title`
+down); a closed group opens to show it arrive. A page outside any group also has Add to new group in its menu: the
+group's name is typed in a field above the page (Enter or leaving the field moves the page into it, Esc or no name
+leaves it out), and the new group takes its place like any group the saved group order doesn't hold — by `order`, or
+after the saved groups. A name some group already has puts the page in that group; an archived group's is refused,
+as the page would be archived with it. Both are saved at once in the page's `.mdx` — its `export const title`
 or `group` literal is rewritten where it stands (a missing group goes on the line after the title) and the rest of the
 file is kept byte for byte — so every open reader sees the change through the usual live reload. The text is kept on
 one line, at most 200 characters, without a backslash, between quotes it doesn't contain (`'` or `"`; a backtick only

@@ -675,6 +675,119 @@ test('the page menu, from a right click or Shift+F10, renames a page or pins it;
   await expect(episode.getByRole('link', { name: '저장 안 될 제목', exact: true })).toHaveCount(0)
 })
 
+test('a page outside any group goes into a new group named from its menu', async ({ page }) => {
+  const [script, still, pilot] = [1, 2, 3].map(p => pageSlug('106', p))
+  const saved = { docs: Object.fromEntries([script, still, pilot].map(slug => [slug, { group: '' }])), archived: { groups: [groupName('100')] } }
+  const posts = []
+  const pins = []
+  await mockPageSaves(page, saved, posts)
+  await mockPins(page, saved, pins)
+  const navigation = await openLongProject(page, { episodes: ['105', '106', '100'], saved })
+  const title = '더 명확하게, 더 편안하게'
+  // A page's row outside any group (its link in the Pinned group or in a group is not this one).
+  const looseLink = slug => navigation.locator(`:scope > div > a[data-doc="${slug}"]`)
+  const menu = page.getByRole('menu', { name: title, exact: true })
+  const field = name => navigation.getByRole('textbox', { name: `New group for ${name}`, exact: true })
+  const groupToggle = name => navigation.locator(`[data-group="${name}"] > button`)
+  const addToNewGroup = async (link, name) => {
+    await link.click({ button: 'right' })
+    await page.getByRole('menu', { name, exact: true }).getByRole('menuitem', { name: 'Add to new group', exact: true }).click()
+    await expect(field(name)).toBeFocused()
+  }
+
+  // Its menu has Add to new group after Rename. The group's name is typed in a field above the page, which stays in
+  // view; Escape leaves the page where it was, with focus back on it.
+  await looseLink('overview').click({ button: 'right' })
+  await expect(menu.getByRole('menuitem')).toHaveText(['Open in new tab', 'Open in new window', 'Copy link', 'RenameF2', 'Add to new group', 'Pin to the top', 'Archive'])
+  await menu.getByRole('menuitem', { name: 'Add to new group', exact: true }).click()
+  await expect(menu).toHaveCount(0)
+  await expect(field(title)).toBeFocused()
+  await expect(field(title)).toHaveValue('')
+  await expect(field(title)).toHaveAttribute('placeholder', 'Group name')
+  const preview = navigation.getByRole('link', { name: title, exact: true })
+  await expect(preview).toBeVisible()
+  const [fieldBox, pageBox] = await Promise.all([rect(field(title)), rect(preview)])
+  expect(fieldBox.bottom).toBeLessThanOrEqual(pageBox.top)
+  await page.keyboard.type('버릴 그룹')
+  await page.keyboard.press('Escape')
+  await expect(field(title)).toHaveCount(0)
+  await expect(looseLink('overview')).toBeFocused()
+
+  // From the keyboard as well: Shift+F10, the arrow keys and Enter. No name leaves the page out of any group too.
+  await page.keyboard.press('Shift+F10')
+  for (let step = 0; step < 4; step++) await page.keyboard.press('ArrowDown')
+  await expect(menu.getByRole('menuitem', { name: 'Add to new group', exact: true })).toBeFocused()
+  await page.keyboard.press('Enter')
+  await expect(field(title)).toBeFocused()
+  await page.keyboard.type('   ')
+  await page.keyboard.press('Enter')
+  await expect(field(title)).toHaveCount(0)
+  await expect(looseLink('overview')).toBeFocused()
+  await page.waitForTimeout(300)
+  expect(posts).toEqual([])
+
+  // Enter moves the page into a new group of that name, on one line, and focus goes along to it there.
+  await page.keyboard.press('Shift+F10')
+  await page.keyboard.press('End')
+  for (let step = 0; step < 2; step++) await page.keyboard.press('ArrowUp')
+  await expect(menu.getByRole('menuitem', { name: 'Add to new group', exact: true })).toBeFocused()
+  await page.keyboard.press('Enter')
+  await page.keyboard.type('  검수   메모 ')
+  await page.keyboard.press('Enter')
+  await expect.poll(() => groupsOf(navigation, 'overview')).toEqual(['검수 메모'])
+  await expect(pageLink(navigation, 'overview')).toBeFocused()
+  await expect(groupToggle('검수 메모')).toHaveText('검수 메모1')
+  await expect(looseLink('overview')).toHaveCount(0)
+  expect(posts).toEqual([{ slug: 'moa-design', doc: 'overview', group: '검수 메모' }])
+  await page.reload()
+  await expect.poll(() => groupsOf(navigation, 'overview')).toEqual(['검수 메모'])
+  // In a group, the page's menu has no Add to new group.
+  await pageLink(navigation, 'overview').click({ button: 'right' })
+  await expect(menu.getByRole('menuitem')).toHaveText(['Open in new tab', 'Open in new window', 'Copy link', 'RenameF2', 'Pin to the top', 'Archive'])
+  await page.keyboard.press('Escape')
+
+  // Leaving the field saves it too, and a name some group already has puts the page in that group.
+  await addToNewGroup(looseLink(script), 'P0 · 대본')
+  await field('P0 · 대본').fill('검수 메모')
+  await page.mouse.click(900, 600)
+  await expect.poll(() => groupsOf(navigation, script)).toEqual(['검수 메모'])
+  await expect(groupToggle('검수 메모')).toHaveText('검수 메모2')
+  expect(posts.at(-1)).toEqual({ slug: 'moa-design', doc: script, group: '검수 메모' })
+
+  // An archived group's name is refused — the page would be archived with that group — and the list says why.
+  await addToNewGroup(looseLink(still), 'P1 · 스틸')
+  await page.keyboard.type(groupName('100'))
+  await page.keyboard.press('Enter')
+  await expect(page.getByRole('alert').filter({ hasText: 'is an archived group' })).toHaveText(`“${groupName('100')}” is an archived group. Unarchive it first, or choose another name.`)
+  await expect(looseLink(still)).toBeFocused()
+  await page.waitForTimeout(300)
+  expect(posts).toHaveLength(2)
+
+  // From the page's row in the Pinned group: that row stays where it is, with focus, under the new group's name.
+  await looseLink(still).hover()
+  await looseLink(still).locator('..').getByRole('button', { name: 'Pin P1 · 스틸', exact: true }).click()
+  await expect.poll(() => pinnedTitles(navigation)).toEqual(['P1 · 스틸'])
+  const pinnedLink = pinnedGroup(navigation).locator('a').first()
+  await addToNewGroup(pinnedLink, 'P1 · 스틸')
+  await expect(pinnedGroup(navigation).getByRole('textbox')).toBeFocused()
+  await page.keyboard.type('스틸 모음')
+  await page.keyboard.press('Enter')
+  await expect.poll(() => groupsOf(navigation, still)).toEqual(['스틸 모음'])
+  await expect(pinnedLink).toHaveText('P1 · 스틸 스틸 모음')
+  await expect(pinnedLink).toBeFocused()
+  expect(posts.at(-1)).toEqual({ slug: 'moa-design', doc: still, group: '스틸 모음' })
+
+  // A failed save leaves the page out of any group, without the new group, and says why.
+  await page.unroute('**/api/doc/update')
+  await mockPageSaves(page, saved, posts, () => ({ status: 500, json: { error: '검수용 저장 실패' } }))
+  await addToNewGroup(looseLink(pilot), 'P2 · 파일럿')
+  await page.keyboard.type('저장 안 될 그룹')
+  await page.keyboard.press('Enter')
+  await expect(page.getByRole('alert').filter({ hasText: '검수용 저장 실패' })).toBeVisible()
+  await expect(looseLink(pilot)).toBeVisible()
+  await expect(navigation.locator('[data-group="저장 안 될 그룹"]')).toHaveCount(0)
+})
+
 test('a page or a whole group is archived from its menu into an Archived group at the end of the list, and brought back from there', async ({ page }) => {
   const saved = {}
   const posts = []

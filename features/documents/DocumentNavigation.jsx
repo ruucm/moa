@@ -111,11 +111,12 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
   // The page being dragged to another group, and the group it would join.
   const [draggedPage, setDraggedPage] = useState(null)
   const [pageTarget, setPageTarget] = useState(null)
-  // The row whose title is being edited: { slug, pinned } (`pinned` for its row in the Pinned group).
-  const [renaming, setRenaming] = useState(null)
-  const renamingRef = useRef(null)
-  const renameInput = useRef(null)
-  const renamedRow = useRef(null)
+  // The row being edited — { slug, pinned, field }, `pinned` for its row in the Pinned group: its page's title
+  // (`field: 'title'`), or the name of a new group for a page outside any group (`field: 'group'`).
+  const [editing, setEditing] = useState(null)
+  const editingRef = useRef(null)
+  const editInput = useRef(null)
+  const editedRow = useRef(null)
   // The menu open on a page row — { entry, index, x, y }, `index` for the row in the Pinned group — from a right
   // click, a long press, or Shift+F10 on the link; the link gets focus back when the menu closes from the keyboard.
   const [menu, setMenu] = useState(null)
@@ -232,13 +233,14 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
     if (moved.focus) link.focus()
   }, [groups, collapsed])
 
-  // Focus goes back to a page's link once its title is no longer edited from the keyboard.
+  // Focus goes back to a page's link once its title, or the name of a new group for it, is no longer edited from the
+  // keyboard.
   useEffect(() => {
-    const row = renamedRow.current
-    if (renaming || !row) return
-    renamedRow.current = null
+    const row = editedRow.current
+    if (editing || !row) return
+    editedRow.current = null
     findLink(navRef.current, row.slug, row.pinned)?.focus()
-  }, [renaming])
+  }, [editing])
 
   // While a group or a page is dragged, holding the pointer near the top or bottom edge of the list scrolls it,
   // so it can travel the whole list in one drag.
@@ -351,22 +353,42 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
     savePage({ slug: entry.slug, group: name })
   }
 
-  const startRename = (entry, pinned) => {
+  const startEdit = (entry, pinned, field) => {
     setOrderError('')
-    renamingRef.current = { slug: entry.slug, pinned }
-    setRenaming(renamingRef.current)
+    editingRef.current = { slug: entry.slug, pinned, field }
+    setEditing(editingRef.current)
   }
+  // Takes the field away from `entry`'s row and returns that row, or null when it is gone already: only the first of
+  // Enter, Escape and leaving the field counts — Escape also takes the field away, which may blur it.
+  const endEdit = (entry) => {
+    const row = editingRef.current
+    if (row?.slug !== entry.slug) return null
+    editingRef.current = null
+    setEditing(null)
+    return row
+  }
+  const oneLine = (text) => (text || '').replace(/\s+/g, ' ').trim()
   // Enter, or leaving the field, saves a changed title; Escape keeps the old one (`title` null). A field closed from
-  // the keyboard gives focus back to the page's link. Only the first of these counts: Escape also takes the field
-  // away, which may blur it.
+  // the keyboard gives focus back to the page's link.
   const endRename = (entry, title, fromKeyboard) => {
-    const row = renamingRef.current
-    if (row?.slug !== entry.slug) return
-    renamingRef.current = null
-    if (fromKeyboard) renamedRow.current = row
-    setRenaming(null)
-    const text = (title || '').replace(/\s+/g, ' ').trim()
+    const row = endEdit(entry)
+    if (!row) return
+    if (fromKeyboard) editedRow.current = row
+    const text = oneLine(title)
     if (text && text !== entry.title) savePage({ slug: entry.slug, title: text })
+  }
+  // A page outside any group goes into the group named in the field above it — a new group, or one of that name
+  // already there — as a move into another group: Enter saves it and keyboard focus goes along to the page there,
+  // and leaving the field saves it too. Escape, or no name, leaves the page where it was. An archived group's name is
+  // refused: the page would be archived with that group. A page's row in the Pinned group stays where it is.
+  const endNewGroup = (entry, name, fromKeyboard) => {
+    const row = endEdit(entry)
+    if (!row) return
+    const text = oneLine(name)
+    const refused = archivedGroups.has(text)
+    if (fromKeyboard && (!text || refused || row.pinned)) editedRow.current = row
+    if (refused) setOrderError(`“${text}” is an archived group. Unarchive it first, or choose another name.`)
+    else if (text) movePage(entry, text, { focus: fromKeyboard, reveal: !row.pinned })
   }
 
   // The menu of a page ({ kind: 'page', entry, index }) or of a group ({ kind: 'group', name }) opens at the pointer,
@@ -587,7 +609,7 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
         }
         if (event.key === 'F2' && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
           event.preventDefault()
-          startRename(entry, pinned)
+          startEdit(entry, pinned, 'title')
           return
         }
         if (!moves || !event.altKey || (event.key !== 'ArrowUp' && event.key !== 'ArrowDown')) return
@@ -646,18 +668,19 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
     const pinned = pinnedSlugs.includes(entry.slug)
     const inPinned = index !== undefined
     const context = (inPinned || withGroup) && entry.group
-    if (renaming?.slug === entry.slug && renaming.pinned === inPinned) return (
+    const edited = editing?.slug === entry.slug && editing.pinned === inPinned && editing.field
+    if (edited === 'title') return (
       <div key={entry.slug} className={styles.documentRow}>
-        <form className={styles.renameForm} onSubmit={(event) => { event.preventDefault(); endRename(entry, renameInput.current?.value, true) }}>
+        <form className={styles.renameForm} onSubmit={(event) => { event.preventDefault(); endRename(entry, editInput.current?.value, true) }}>
           <Icon name="file" size={16} />
-          <input ref={renameInput} className={styles.renameInput} defaultValue={entry.title} maxLength={200} autoFocus
+          <input ref={editInput} className={styles.renameInput} defaultValue={entry.title} maxLength={200} autoFocus
             aria-label={`Title of ${entry.title}`} enterKeyHint="done" onFocus={(event) => event.currentTarget.select()}
             onKeyDown={(event) => { if (event.key === 'Escape' && !event.nativeEvent.isComposing) { event.preventDefault(); endRename(entry, null, true) } }}
             onBlur={(event) => { if (document.hasFocus()) endRename(entry, event.currentTarget.value, false) }} />
         </form>
       </div>
     )
-    return (
+    const row = (
       <div key={entry.slug} className={`${styles.documentRow} ${authed && !archived ? styles.pinnableRow : ''} ${editable ? styles.editableRow : ''} ${pinned ? styles.pinnedRow : ''} ${archived ? styles.archivedRow : ''} ${draggedPage === entry.slug ? styles.draggingPage : ''} ${menu?.kind === 'page' && menu.entry.slug === entry.slug && (menu.index !== undefined) === inPinned ? styles.menuRow : ''}`}>
         <a href={pageHref(entry)} data-doc={entry.slug}
           className={`${styles.documentLink} ${entry.slug === doc?.slug ? styles.currentDocument : ''}`}
@@ -671,6 +694,21 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
         </button>}
       </div>
     )
+    // The name of a new group for the page is typed above it, in a field in the shape of a group's heading: the group
+    // as it will be, with the page in it.
+    if (edited === 'group') return (
+      <div key={entry.slug} className={styles.newGroup}>
+        <form className={styles.newGroupForm} onSubmit={(event) => { event.preventDefault(); endNewGroup(entry, editInput.current?.value, true) }}>
+          <span className={`${styles.groupCaret} ${styles.groupExpanded}`}><Icon name="chevronRight" size={14} /></span>
+          <input ref={editInput} className={`${styles.renameInput} ${styles.groupNameInput}`} placeholder="Group name" maxLength={200} autoFocus
+            aria-label={`New group for ${entry.title}`} enterKeyHint="done"
+            onKeyDown={(event) => { if (event.key === 'Escape' && !event.nativeEvent.isComposing) { event.preventDefault(); endNewGroup(entry, null, true) } }}
+            onBlur={(event) => { if (document.hasFocus()) endNewGroup(entry, event.currentTarget.value, false) }} />
+        </form>
+        <div className={styles.groupItems}>{row}</div>
+      </div>
+    )
+    return row
   }
 
   // What the open menu's archive item acts on: the group (a group's menu, or a page inside an archived group), or
@@ -721,7 +759,7 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
         </div>}
       </div>
       {reorderable && <p id={`${id}-reorder`} className={styles.visuallyHidden}>Drag a group, or press Alt with the up or down arrow, to change the group order for everyone.</p>}
-      {editable && <p id={`${id}-edit`} className={styles.visuallyHidden}>{movable ? 'Drag a page onto another group, or press Alt with the up or down arrow, to move it there. ' : ''}Press F2 to rename a page, or Shift+F10 for its menu, which also archives it. Shift+F10 on a group opens the group's menu.</p>}
+      {editable && <p id={`${id}-edit`} className={styles.visuallyHidden}>{movable ? 'Drag a page onto another group, or press Alt with the up or down arrow, to move it there. ' : ''}Press F2 to rename a page, or Shift+F10 for its menu, which also archives it, and puts a page outside any group into a new group. Shift+F10 on a group opens the group's menu.</p>}
       {orderError && <p className={styles.navigationError} role="alert">{orderError}</p>}
       <span className={styles.visuallyHidden} role="status">{copied ? 'Link copied' : ''}</span>
       <nav className={styles.documentNavigation} ref={navRef} aria-label="Project documents" {...listDragHandlers}>
@@ -792,8 +830,12 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
             <div role="separator" className={styles.pageMenuRule} />
           </>}
           {menu.kind === 'page' && <button type="button" role="menuitem" className={styles.pageMenuItem}
-            onClick={() => { const { entry, index } = menu; closeMenu(false); startRename(entry, index !== undefined) }}>
+            onClick={() => { const { entry, index } = menu; closeMenu(false); startEdit(entry, index !== undefined, 'title') }}>
             <Icon name="edit" size={14} /><span>Rename</span><kbd className={styles.pageMenuKey} aria-hidden="true">F2</kbd>
+          </button>}
+          {menu.kind === 'page' && !menu.entry.group && !archivedDocs.has(menu.entry.slug) && <button type="button" role="menuitem" className={styles.pageMenuItem}
+            onClick={() => { const { entry, index } = menu; closeMenu(false); startEdit(entry, index !== undefined, 'group') }}>
+            <Icon name="folderPlus" size={14} /><span>Add to new group</span>
           </button>}
           {menu.kind === 'page' && !archivedDocs.has(menu.entry.slug) && !inArchivedGroup(menu.entry) && <button type="button" role="menuitem" className={styles.pageMenuItem}
             onClick={() => {
