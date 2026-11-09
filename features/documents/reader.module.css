@@ -63,7 +63,7 @@
 .renameInput:focus-visible { outline: none; box-shadow: inset 0 0 0 1px var(--color-border-control); }
 /* A page outside any group, put into a new group from its menu: the group's name is typed above the page, in a field
    in the shape of a group's heading — its caret where a heading's is, and its type. */
-.newGroup { margin: var(--space-2) 0; }
+.newGroup { position: relative; margin: var(--space-2) 0; }
 .newGroupForm { display: flex; align-items: center; gap: var(--space-2); min-height: 44px; padding: 0 var(--space-1) 0 var(--space-3); color: var(--color-text-muted); }
 .newGroupForm > .groupCaret { margin-top: 0; }
 .groupNameInput { font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); }
@@ -80,6 +80,9 @@
 .dropInto::after { content: ''; position: absolute; inset: 0; border: 2px solid var(--color-accent-solid); border-radius: var(--radius-sm); pointer-events: none; }
 .documentGroup { position: relative; }
 .documentGroup + .documentGroup { margin-top: var(--space-4); }
+/* A page outside any group that follows a group stands as far from it as the next group would, so it doesn't read as
+   one of that group's pages. */
+.documentGroup:not(.pinnedGroup) + :is(.documentRow, .newGroup) { margin-top: var(--space-4); }
 /* The Archived group closes the list, under a line: the pages and whole groups an admin archived, for every reader,
    a page with the name of its own group beside it. Its groups open and close like any other. */
 .documentGroup.archivedGroup { margin-top: var(--space-5); padding-top: var(--space-3); border-top: 1px solid var(--color-border-subtle); }
