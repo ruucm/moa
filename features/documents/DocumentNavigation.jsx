@@ -98,27 +98,52 @@ function arrangeTop(groups, loose, saved = []) {
   return [...top, ...loose.filter((entry) => !used.has(`page:${entry.slug}`)).map((entry) => ({ page: entry }))]
 }
 
-// The sort menu orders the pages inside each group: by order meta, by title, or newest first.
-function sortPages(items, sort) {
+// The pages of a group as an admin arranged them by dragging (`saved`: their file names): those first, as saved, and
+// the pages not among them — written or moved in since — after them, by their order meta.
+function arrangePages(items, saved) {
+  if (!saved?.length) return items
+  const place = new Map(saved.map((slug, index) => [slug, index]))
+  return [...items.filter((entry) => place.has(entry.slug)).sort((a, b) => place.get(a.slug) - place.get(b.slug)), ...items.filter((entry) => !place.has(entry.slug))]
+}
+
+// The sort menu orders the pages inside each group: by title, newest first, or in the default order — as an admin
+// arranged the group (`saved`), else by order meta.
+function sortPages(items, sort, saved) {
   if (sort === 'name') return [...items].sort((a, b) => compareNames(a.title, b.title))
   if (sort === 'recent') return [...items].sort((a, b) => updatedAt(b) - updatedAt(a))
-  return items
+  return arrangePages(items, saved)
+}
+
+// Where a dragged item would land, compared by value: a new object comes with every move of the pointer.
+const samePlace = (a, b) => a === b || (!!a && !!b && a.into === b.into && a.group === b.group && a.at === b.at && a.index === b.index && a.side === b.side)
+
+const sortHints = {
+  name: 'Sorted by name. Choose “Default order” to arrange pages by hand.',
+  recent: 'Sorted by last update. Choose “Default order” to arrange pages by hand.',
 }
 
 // `onSearch` opens the search over every project (the sidebar's own filter box is gone: the search finds a page
 // of this project as well as any other, see features/search/GlobalSearch.jsx).
 export default function DocumentNavigation({ project, projects, doc, authed, owner, collapsed, onToggle, sort = 'order', onSort, onReorder, onNavigate, onSearch, onCollapse, collapseButtonRef, mobile = false }) {
-  // What is dragged — { group: name } or { page: slug } — and where it would land: into a group ({ into: name }, a
-  // page), or beside an item at the top of the list ({ index, side: 'before' | 'after' }).
+  // What is dragged — { group: name } or { page: slug } — and where it would land: a page into a group, at its end
+  // ({ into: name }), or among the pages of a group, before the one at `at` there or after the last ({ group: name,
+  // at }); a group or a page beside an item at the top of the list ({ index, side: 'before' | 'after' }).
   const [dragged, setDragged] = useState(null)
   const [drop, setDrop] = useState(null)
-  // The top of the list as it is being saved, after a group or a page outside any group was moved there.
-  const [pendingOrder, setPendingOrder] = useState(null)
+  // Changes to the arrangement not saved yet, the latest last: a page moved into another group or out of any (`page`:
+  // { slug, group }), the pages of a group in a new order (`pages`: { group, docs }), the top of the list in a new
+  // order (`top`) — one change may hold all three. They show at once.
+  const [pendingMoves, setPendingMoves] = useState([])
   const [orderError, setOrderError] = useState('')
+  // Why a drop took nothing: the pages are sorted by name or by update, where no page has a place of its own.
+  // `sortBlocked` tells that the dragged page is held over the pages of its own group in such a list.
+  const [hint, setHint] = useState('')
+  const sortBlocked = useRef(false)
   // Pins and unpins not saved yet, as [slug, pinned], the latest last. They show at once.
   const [pendingPins, setPendingPins] = useState([])
   const pinSaves = useRef(Promise.resolve())
-  // Renames and moves not saved yet, as { slug, title } or { slug, group }, the latest last. They show at once too.
+  // Renames not saved yet, as { slug, title }, the latest last. They show at once too. Renames and moves are saved
+  // one after another: both rewrite the page's file.
   const [pendingPages, setPendingPages] = useState([])
   const pageSaves = useRef(Promise.resolve())
   // Pages and groups archived or brought back, not saved yet, as { doc | group, archived }, the latest last.
@@ -140,15 +165,20 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
   const [copied, setCopied] = useState(false)
   const menuTimer = useRef(null)
   const movedPage = useRef(null)
+  // The page that was just moved (its file name): its row is tinted for a moment, to show where it arrived.
+  const [arrived, setArrived] = useState(null)
   const navRef = useRef(null)
   const openedGroup = useRef(null)
   const appliedSort = useRef(sort)
   const movedGroup = useRef(null)
   const id = useId()
   const savedOrder = project.groupOrder
-  const allDocs = useMemo(() => pendingPages.length
-    ? project.docs.map((entry) => pendingPages.reduce((page, { slug, ...change }) => slug === entry.slug ? { ...page, ...change } : page, entry))
-    : project.docs, [project.docs, pendingPages])
+  const allDocs = useMemo(() => {
+    const changes = [...pendingPages, ...pendingMoves.filter((move) => move.page).map((move) => move.page)]
+    return changes.length
+      ? project.docs.map((entry) => changes.reduce((page, { slug, ...change }) => slug === entry.slug ? { ...page, ...change } : page, entry))
+      : project.docs
+  }, [project.docs, pendingPages, pendingMoves])
   // The groups and pages an admin archived (`project.archived`, as they will be once pending changes are saved):
   // out of the list, in the Archived group at its end.
   const archivedGroups = useMemo(() => {
@@ -164,18 +194,26 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
   const inArchivedGroup = (entry) => archivedGroups.has(entry.group || '')
   const docs = useMemo(() => allDocs.filter((entry) => !archivedDocs.has(entry.slug) && !archivedGroups.has(entry.group || '')), [allDocs, archivedDocs, archivedGroups])
   const savedList = useMemo(() => Array.isArray(savedOrder) ? savedOrder : [], [savedOrder])
+  // The top of the list as it is being saved, after a group or a page was moved there; and the pages of each group
+  // as an admin arranged them (`project.pageOrder`, as it will be once pending changes are saved).
+  const pendingOrder = useMemo(() => pendingMoves.findLast((move) => move.top)?.top || null, [pendingMoves])
+  const pageOrders = useMemo(() => {
+    const orders = { ...project.pageOrder }
+    for (const move of pendingMoves) if (move.pages) orders[move.pages.group] = move.pages.docs
+    return orders
+  }, [project.pageOrder, pendingMoves])
   // The top of the list: the groups, their pages sorted by the sort menu, and the pages outside any group, as an admin
-  // arranged them. A moved group or page shows in its new place at once, while the order is being saved.
+  // arranged them. A moved group or page shows in its new place at once, while the change is being saved.
   const top = useMemo(() => {
-    const groups = groupPages(docs.filter((entry) => entry.group)).map((group) => ({ ...group, items: sortPages(group.items, sort) }))
+    const groups = groupPages(docs.filter((entry) => entry.group)).map((group) => ({ ...group, items: sortPages(group.items, sort, pageOrders[group.name]) }))
     return arrangeTop(groups, sortPages(docs.filter((entry) => !entry.group), sort), pendingOrder || savedList)
-  }, [docs, savedList, pendingOrder, sort])
+  }, [docs, savedList, pendingOrder, pageOrders, sort])
   // In the Archived group: pages archived on their own (the name of their group beside them), then whole groups.
   const archivedPages = useMemo(() => sortPages(allDocs.filter((entry) => archivedDocs.has(entry.slug) && !archivedGroups.has(entry.group || '')), sort), [allDocs, archivedDocs, archivedGroups, sort])
   const archivedList = useMemo(() => {
-    const groups = groupPages(allDocs.filter((entry) => archivedGroups.has(entry.group || ''))).map((group) => ({ ...group, items: sortPages(group.items, sort) }))
+    const groups = groupPages(allDocs.filter((entry) => archivedGroups.has(entry.group || ''))).map((group) => ({ ...group, items: sortPages(group.items, sort, pageOrders[group.name]) }))
     return arrangeTop(groups, [], savedList).map((item) => item.group)
-  }, [allDocs, archivedGroups, savedList, sort])
+  }, [allDocs, archivedGroups, savedList, pageOrders, sort])
   const archivedCount = archivedPages.length + archivedList.reduce((count, group) => count + group.items.length, 0)
   const archivedOpen = collapsed.has(ARCHIVED)
   // The page sort only shows where some group (or the ungrouped list) has more than one page.
@@ -188,12 +226,11 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
   const named = useMemo(() => top.filter((item) => item.group).map((item) => item.group), [top])
   // An admin drags a group into another place at the top of the list, once there is another item there.
   const reorderable = owner && top.length > 1
-  // An admin renames pages and moves them into other groups (a demo project stays as it ships). A page in a group can
-  // move once there is a second group; a page outside any group, once there is anything else at the top of the list —
-  // a group to go into, or a place beside it.
+  // An admin renames pages and moves them (a demo project stays as it ships). A page in a group moves among the
+  // group's pages, into another group, or out of its group; a page outside any group, once there is anything else at
+  // the top of the list — a group to go into, or a place beside it.
   const editable = owner && !project.demo
-  const movable = editable && top.length > 1
-  const canMove = (entry) => movable && (entry.group ? named.length > 1 : true)
+  const canMove = (entry) => editable && (!!entry.group || top.length > 1)
   // Pinned pages, the latest pin first, as they will be once the pending changes are saved.
   const pinnedSlugs = useMemo(() => {
     const changed = new Map(pendingPins)
@@ -228,6 +265,7 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
   useEffect(() => {
     if (appliedSort.current === sort) return
     appliedSort.current = sort
+    setHint('')
     navRef.current?.scrollTo({ top: 0 })
   }, [sort])
 
@@ -241,8 +279,8 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
     if (toggle && document.activeElement !== toggle) toggle.focus()
   }, [top])
 
-  // A page moved into another group comes into view there, and focus follows it when it was moved from the
-  // keyboard: the row is drawn anew in its new group.
+  // A moved page comes into view where it arrived and shows there for a moment, and focus follows it when it was
+  // moved from the keyboard: in another group its row is drawn anew.
   useEffect(() => {
     const moved = movedPage.current
     movedPage.current = null
@@ -250,7 +288,13 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
     if (!link) return
     revealInList(navRef.current, link, true)
     if (moved.focus) link.focus()
+    setArrived(moved.slug)
   }, [top, collapsed])
+  useEffect(() => {
+    if (!arrived) return
+    const timer = setTimeout(() => setArrived(null), 1500)
+    return () => clearTimeout(timer)
+  }, [arrived])
 
   // Focus goes back to a page's link once its title, or the name of a new group for it, is no longer edited from the
   // keyboard.
@@ -267,7 +311,11 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
     if (!dragged) return
     let pointer = null
     let frame = 0
-    const track = (event) => { pointer = event.clientY }
+    const track = (event) => {
+      pointer = event.clientY
+      // Outside the list, the page is no longer held over the pages of its group (see the note on a sorted list).
+      if (!navRef.current?.contains(event.target)) sortBlocked.current = false
+    }
     const step = () => {
       const nav = navRef.current
       if (nav && pointer !== null) {
@@ -292,30 +340,72 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
     onToggle(name)
   }
 
+  // Saves a change to the arrangement for everyone: a page into another group or out of any, in its file (`page`:
+  // { slug, group }); then the order of a group's pages (`pages`: { group, docs }) and of the top of the list (`top`),
+  // in the registry. Changes are saved one after another, in the order they were made; each shows at once, until it
+  // is saved — or is undone if its save fails, down to what was saved before the failure.
+  const saveMove = (change) => {
+    setOrderError('')
+    setHint('')
+    setPendingMoves((current) => [...current, change])
+    const post = async (url, body, failure) => {
+      const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ slug: project.slug, ...body }) })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok || data.error) throw new Error(data.error || failure)
+    }
+    pageSaves.current = pageSaves.current.then(async () => {
+      try {
+        if (change.page) await post('/api/doc/update', { doc: change.page.slug, group: change.page.group }, 'Could not save the page.')
+        if (change.pages) await post('/api/order/pages', change.pages, 'Could not save the page order.')
+        if (change.top) await post('/api/order/groups', { groups: change.top }, 'Could not save the group order.')
+      } catch (error) {
+        setOrderError(error.message || 'Could not save the change. Please try again.')
+      }
+      try { await onReorder?.() } catch {}
+      setPendingMoves((current) => current.filter((item) => item !== change))
+    })
+  }
+
+  // An item of the top of the list as it is saved, and the archived groups and pages, which keep their saved places.
+  const savedName = (item) => item.group ? item.group.name : { doc: item.page.slug }
+  const keptOrder = () => (pendingOrder || savedList).filter((entry) => typeof entry === 'string' ? archivedGroups.has(entry) : archivedDocs.has(entry?.doc))
+
+  // The top of the list `next` as it is saved once `item` was moved to its place there: the items down to the last
+  // group, `item`, or a page saved in its place before (pages outside any group below them stay unsaved, at the end,
+  // in the order of the sort menu).
+  const topOrder = (next, item) => {
+    const end = next.findLastIndex((entry) => entry.group || entry.placed || entry === item)
+    return [...next.slice(0, end + 1).map(savedName), ...keptOrder()]
+  }
+
+  // What to save for the top of the list to stand as `next` once a page has changed groups (`pages`: the pages as
+  // they will be). Nothing (null) where the saved order and the order meta put it so already; else the list from its
+  // start, as far down as it takes — what stands below keeps following the order meta and the sort menu, so a group
+  // written later still finds its place among the groups nobody arranged.
+  const topSave = (next, pages) => {
+    const groups = groupPages(pages.filter((page) => page.group))
+    const loose = sortPages(pages.filter((page) => !page.group), sort)
+    const key = (item) => item.group ? `group:${item.group.name}` : `page:${item.page.slug}`
+    const wanted = next.map(key)
+    const stands = (saved) => {
+      const list = arrangeTop(groups, loose, saved)
+      return list.length === wanted.length && list.every((item, index) => key(item) === wanted[index])
+    }
+    if (stands(pendingOrder || savedList)) return null
+    const names = next.map(savedName)
+    let end = 1
+    while (end < names.length && !stands(names.slice(0, end))) end += 1
+    return [...names.slice(0, end), ...keptOrder()]
+  }
+
   // Moves the item at `from` of the top of the list to the place before the item at `at` (at the end for its length),
-  // and saves that order for everyone: the items down to the last group, the moved item, or a page saved in its place
-  // before (pages outside any group below them stay unsaved, at the end, in the order of the sort menu), then the
-  // archived groups and pages, which keep their saved places. The move shows at once and is undone if the save fails.
-  const moveTop = async (from, at) => {
-    if (pendingOrder || from < 0 || from >= top.length || at < 0 || at > top.length || at === from || at === from + 1) return
+  // and saves that order.
+  const moveTop = (from, at) => {
+    if (from < 0 || from >= top.length || at < 0 || at > top.length || at === from || at === from + 1) return
     const next = [...top]
     const [item] = next.splice(from, 1)
     next.splice(at > from ? at - 1 : at, 0, item)
-    const end = next.findLastIndex((entry) => entry.group || entry.placed || entry === item)
-    const kept = savedList.filter((entry) => typeof entry === 'string' ? archivedGroups.has(entry) : archivedDocs.has(entry?.doc))
-    const order = [...next.slice(0, end + 1).map((entry) => entry.group ? entry.group.name : { doc: entry.page.slug }), ...kept]
-    setOrderError('')
-    setPendingOrder(order)
-    try {
-      const response = await fetch('/api/order/groups', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ slug: project.slug, groups: order }) })
-      const data = await response.json().catch(() => ({}))
-      if (!response.ok || data.error) throw new Error(data.error || 'Could not save the group order.')
-      await onReorder?.()
-    } catch (error) {
-      setOrderError(error.message || 'Could not save the group order. Please try again.')
-    } finally {
-      setPendingOrder(null)
-    }
+    saveMove({ top: topOrder(next, item) })
   }
 
   // Pins a page for this reader, or unpins it. Changes are saved one after another, in the order they were
@@ -347,8 +437,8 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
     })
   }
 
-  // Saves a rename or a move in the page's file, where the sidebar reads its title and group. Changes are saved one
-  // after another, in the order they were made, and each shows until it is saved — or is undone if the save fails.
+  // Saves a rename in the page's file, where the sidebar reads its title. Renames and moves are saved one after
+  // another, in the order they were made, and each shows until it is saved — or is undone if the save fails.
   const savePage = (change) => {
     setOrderError('')
     setPendingPages((current) => [...current, change])
@@ -367,13 +457,77 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
     })
   }
 
-  // Moves a page into the group `name`. A closed group opens, so the page is seen to arrive. `focus` takes keyboard
-  // focus along to the page's new row; `reveal: false` leaves the list where it is (a move made in the Pinned group).
-  const movePage = (entry, name, { focus = false, reveal = true } = {}) => {
-    if (!entry || !name || (entry.group || '') === name) return
+  // Moves a page into the group `name`, or to another place among the pages of its own. `at` is its place among the
+  // group's other pages as they are listed — an index, or 'end' — and is saved as the group's order; left out, or
+  // while the pages are sorted by name or by update, the page goes where the group's order puts it. A closed group
+  // opens, so the page is seen to arrive. `focus` takes keyboard focus along to the page's new row; `reveal: false`
+  // leaves the list where it is (a move made in the Pinned group).
+  const movePage = (entry, name, { at, focus = false, reveal = true } = {}) => {
+    if (!entry || !name) return
+    const group = named.find((item) => item.name === name)
+    const stays = (entry.group || '') === name
+    const change = stays ? {} : { page: { slug: entry.slug, group: name } }
+    if (group && at !== undefined && sort === 'order') {
+      const others = group.items.filter((item) => item.slug !== entry.slug).map((item) => item.slug)
+      const index = at === 'end' ? others.length : Math.max(0, Math.min(at, others.length))
+      const order = [...others.slice(0, index), entry.slug, ...others.slice(index)]
+      if (!stays || order.some((slug, place) => slug !== group.items[place].slug)) change.pages = { group: name, docs: order }
+    }
+    if (!change.page && !change.pages) return
+    // The groups stay where they stand. A group that isn't in the saved order has its place by the order meta of its
+    // first page, so a page that changes groups could carry its new group — or leave its old one — to another place:
+    // then the top of the list is saved as it stands, without the page's own row there or a group it leaves empty.
+    if (change.page) {
+      const stands = top.filter((item) => item.page ? item.page.slug !== entry.slug : item.group.name !== entry.group || item.group.items.length > 1)
+      const order = topSave(stands, docs.map((page) => page.slug === entry.slug ? { ...page, group: name } : page))
+      if (order) change.top = order
+    }
     if (collapsed.has(name)) onToggle(name)
     if (reveal) movedPage.current = { slug: entry.slug, focus }
-    savePage({ slug: entry.slug, group: name })
+    saveMove(change)
+  }
+
+  // Takes a page out of its group, to the place before the item at `at` of the top of the list (at the end for its
+  // length); the top of the list is saved as far down as it takes for the page to stand there. A group left without
+  // a page goes with it.
+  const ungroupPage = (entry, at, { focus = false, reveal = true } = {}) => {
+    if (!entry?.group) return
+    const next = [...top]
+    const from = next.findIndex((item) => item.group?.name === entry.group)
+    let index = Math.max(0, Math.min(at, next.length))
+    if (from >= 0 && next[from].group.items.length === 1) {
+      next.splice(from, 1)
+      if (index > from) index -= 1
+    }
+    next.splice(index, 0, { page: { ...entry, group: '' }, placed: true })
+    const order = topSave(next, docs.map((page) => page.slug === entry.slug ? { ...page, group: '' } : page))
+    if (reveal) movedPage.current = { slug: entry.slug, focus }
+    saveMove({ page: { slug: entry.slug, group: '' }, ...(order && { top: order }) })
+  }
+
+  // Puts a page into the group `name`: at the end of a group of that name already there, or in a new group. A new
+  // group gets a place of its own at the top of the list: right after the group the page was in (in that group's
+  // place, when the page was its only one); in the page's own place, when it was outside any group and an admin had
+  // put it there; or right above the pages outside any group that follow the sort menu. Where the order meta of the
+  // page wouldn't put the group there by itself, the top of the list is saved as far down as it takes.
+  const groupPage = (entry, name, { focus = false, reveal = true } = {}) => {
+    if (named.some((group) => group.name === name)) return movePage(entry, name, { at: 'end', focus, reveal })
+    const item = { group: { name, items: [{ ...entry, group: name }] } }
+    const next = [...top]
+    if (entry.group) {
+      const from = next.findIndex((other) => other.group?.name === entry.group)
+      const alone = from >= 0 && next[from].group.items.length === 1
+      next.splice(from < 0 ? next.length : alone ? from : from + 1, alone ? 1 : 0, item)
+    } else {
+      const from = next.findIndex((other) => other.page?.slug === entry.slug)
+      const end = next.findLastIndex((other) => other.group || other.placed)
+      if (from >= 0) next.splice(from, 1)
+      next.splice(from >= 0 && from <= end ? from : end + 1, 0, item)
+    }
+    const order = topSave(next, docs.map((page) => page.slug === entry.slug ? { ...page, group: name } : page))
+    if (collapsed.has(name)) onToggle(name)
+    if (reveal) movedPage.current = { slug: entry.slug, focus }
+    saveMove({ page: { slug: entry.slug, group: name }, ...(order && { top: order }) })
   }
 
   const startEdit = (entry, pinned, field) => {
@@ -400,18 +554,19 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
     const text = oneLine(title)
     if (text && text !== entry.title) savePage({ slug: entry.slug, title: text })
   }
-  // A page outside any group goes into the group named in the field above it — a new group, or one of that name
-  // already there — as a move into another group: Enter saves it and keyboard focus goes along to the page there,
-  // and leaving the field saves it too. Escape, or no name, leaves the page where it was. An archived group's name is
-  // refused: the page would be archived with that group. A page's row in the Pinned group stays where it is.
+  // A page goes into the group named in the field above it — a new group, or one of that name already there — out
+  // of the group it was in: Enter saves it and keyboard focus goes along to the page there, and leaving the field
+  // saves it too. Escape, no name, or the name of its own group leaves the page where it was. An archived group's
+  // name is refused: the page would be archived with that group. A page's row in the Pinned group stays where it is.
   const endNewGroup = (entry, name, fromKeyboard) => {
     const row = endEdit(entry)
     if (!row) return
     const text = oneLine(name)
     const refused = archivedGroups.has(text)
-    if (fromKeyboard && (!text || refused || row.pinned)) editedRow.current = row
+    const stays = !text || refused || text === (entry.group || '')
+    if (fromKeyboard && (stays || row.pinned)) editedRow.current = row
     if (refused) setOrderError(`“${text}” is an archived group. Unarchive it first, or choose another name.`)
-    else if (text) movePage(entry, text, { focus: fromKeyboard, reveal: !row.pinned })
+    else if (!stays) groupPage(entry, text, { focus: fromKeyboard, reveal: !row.pinned })
   }
 
   // The menu of a page ({ kind: 'page', entry, index }) or of a group ({ kind: 'group', name }) opens at the pointer,
@@ -576,24 +731,41 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
     const from = top.findIndex((item) => item.group?.name === name)
     return target.index === from ? null : { index: target.index, side: target.index < from ? 'before' : 'after' }
   }
-  // A dragged page goes into the group under the pointer — its heading or its pages — unless that is its own group. A
-  // page outside any group also goes beside an item at the top of the list: above a group from the top edge of its
-  // heading (below a closed group from the bottom edge), above or below another such page by the half of it under the
-  // pointer, or into the gap between items it is held in. A drop that would leave it where it is takes nothing.
+  // The rows of the pages a group lists (data-row), in its order.
+  const rowsOf = (group) => [...group.querySelectorAll(':scope > div > [data-row]')]
+  // A dragged page goes where the pointer holds it. Over the pages of a group: among them, before the page whose upper
+  // half is under the pointer, or after the one whose lower half is — but while they are sorted by name or by update,
+  // where no page has a place of its own, it only joins another group. On a group's heading: into that group, at its
+  // end; or, from the top edge of the heading (and the bottom edge, of a closed group), out of any group to the place
+  // above (below) that group at the top of the list. On a page outside any group, by the half of it under the pointer,
+  // or in the gap between two items at the top of the list: out of any group, to that place. A drop that would leave
+  // the page where it is takes nothing.
   const pageDropAt = (event, slug) => {
+    sortBlocked.current = false
     const entry = docs.find((item) => item.slug === slug)
     if (!entry) return null
     const target = topAt(event)
     const name = target?.element.dataset.group
-    if (entry.group) return name !== undefined && name !== entry.group ? { into: name } : null
     const y = event.clientY
     let place = null
     if (name !== undefined) {
       const box = target.element.firstElementChild.getBoundingClientRect()
       const edge = box.height / 4
+      if (y > box.bottom) {
+        const own = name === entry.group
+        if (sort !== 'order') {
+          sortBlocked.current = own
+          return own ? null : { into: name }
+        }
+        const rows = rowsOf(target.element)
+        const below = rows.findIndex((row) => { const rect = row.getBoundingClientRect(); return y < rect.top + rect.height / 2 })
+        const at = below < 0 ? rows.length : below
+        const from = own ? rows.findIndex((row) => row.dataset.row === slug) : -1
+        return from >= 0 && (at === from || at === from + 1) ? null : { group: name, at }
+      }
       if (y < box.top + edge) place = { index: target.index, side: 'before' }
-      else if (collapsed.has(name) && y > box.bottom - edge && y <= box.bottom) place = { index: target.index, side: 'after' }
-      else return { into: name }
+      else if (collapsed.has(name) && y > box.bottom - edge) place = { index: target.index, side: 'after' }
+      else return name === entry.group ? null : { into: name }
     } else if (target) {
       const box = target.element.getBoundingClientRect()
       place = { index: target.index, side: y < box.top + box.height / 2 ? 'before' : 'after' }
@@ -601,6 +773,7 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
       const below = topElements().findIndex((element) => element.getBoundingClientRect().top > y)
       place = below < 0 ? { index: top.length - 1, side: 'after' } : { index: below, side: 'before' }
     } else return null
+    if (entry.group) return place
     const from = top.findIndex((item) => item.page?.slug === slug)
     const at = place.side === 'before' ? place.index : place.index + 1
     return at === from || at === from + 1 ? null : place
@@ -609,7 +782,7 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
   const dragOverList = (event) => {
     if (!dragged) return
     const place = dropAt(event)
-    setDrop(place)
+    setDrop((current) => samePlace(current, place) ? current : place)
     if (!place) return
     event.preventDefault()
     event.dataTransfer.dropEffect = 'move'
@@ -622,20 +795,28 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
       const place = dropAt(event)
       if (place) {
         event.preventDefault()
-        if (place.into) movePage(docs.find((item) => item.slug === dragged.page), place.into)
-        else {
-          const from = top.findIndex((item) => dragged.group !== undefined ? item.group?.name === dragged.group : item.page?.slug === dragged.page)
-          moveTop(from, place.side === 'before' ? place.index : place.index + 1)
+        const entry = dragged.page === undefined ? null : docs.find((item) => item.slug === dragged.page)
+        if (place.into !== undefined) movePage(entry, place.into, { at: 'end' })
+        else if (place.group !== undefined) {
+          // Among the group's other pages: its own row, above the place, is not counted.
+          const own = entry.group === place.group ? named.find((group) => group.name === place.group)?.items.findIndex((item) => item.slug === entry.slug) ?? -1 : -1
+          movePage(entry, place.group, { at: own >= 0 && place.at > own ? place.at - 1 : place.at })
+        } else {
+          const at = place.side === 'before' ? place.index : place.index + 1
+          if (entry?.group) ungroupPage(entry, at)
+          else moveTop(top.findIndex((item) => dragged.group !== undefined ? item.group?.name === dragged.group : item.page?.slug === dragged.page), at)
         }
       }
       endDrag()
     },
   }
-  // An admin's page link: dragged onto another group, or moved with Alt and the up or down arrow, the page joins
-  // that group — a page outside any group the nearest group above or below it, and dragged between the items at the
-  // top of the list, it moves there; F2 edits its title, and a right click, a long press, or Shift+F10 opens its menu.
-  // `pinned` is the page's row in the Pinned group, which stays where it is (`index` its place there). An archived
-  // page's row only has the menu and F2.
+  // An admin's page link. Dragged, the page goes where it is dropped: among the pages of a group, into a group, or out
+  // of any group to a place at the top of the list. Alt with the up or down arrow moves it a place up or down among
+  // the pages of its group, and from the group's first or last place into the group above (at its end) or below (at
+  // its start) — a page outside any group goes into the nearest group above or below it the same way. While the pages
+  // are sorted by name or by update, the arrows take it straight to that group. F2 edits its title, and a right click,
+  // a long press, or Shift+F10 opens its menu. `pinned` is the page's row in the Pinned group, which stays where it is
+  // (`index` its place there). An archived page's row only has the menu and F2.
   const pageHandlers = (entry, pinned, index, archived) => {
     if (!editable) return {}
     const target = { kind: 'page', entry, index }
@@ -645,9 +826,17 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
         draggable: true,
         onDragStart: (event) => {
           event.dataTransfer.effectAllowed = 'all'
+          sortBlocked.current = false
           setDragged({ page: entry.slug })
         },
-        onDragEnd: endDrag,
+        // A page let go over the pages of its own group while they are sorted: the list says why it took nothing.
+        // The note of an earlier drag goes here too, not when the next drag starts: taking it away then would move
+        // the list under the pointer, and a browser gives up a drag whose source moves as it starts.
+        onDragEnd: () => {
+          setHint(sortBlocked.current ? sortHints[sort] || '' : '')
+          sortBlocked.current = false
+          endDrag()
+        },
       }),
       ...pressHandlers(target),
       onContextMenu: (event) => { if (!event.shiftKey) openMenu(event, target) },
@@ -665,11 +854,18 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
         if (!moves || !event.altKey || (event.key !== 'ArrowUp' && event.key !== 'ArrowDown')) return
         event.preventDefault()
         const up = event.key === 'ArrowUp'
-        // A page in a group goes into the group above or below its own; a page outside any group, into the nearest
-        // group above or below it.
+        const arranged = sort === 'order'
         const at = top.findIndex((item) => entry.group ? item.group?.name === entry.group : item.page?.slug === entry.slug)
+        // A place up or down among the pages of its group, while there is one.
+        const pages = arranged && entry.group ? top[at]?.group.items : null
+        const to = pages ? pages.findIndex((item) => item.slug === entry.slug) + (up ? -1 : 1) : -1
+        if (pages && to >= 0 && to < pages.length) {
+          movePage(entry, entry.group, { at: to, focus: true, reveal: !pinned })
+          return
+        }
+        // Then into the nearest group above, at its end, or below, at its start.
         const into = (up ? top.slice(0, at).reverse() : top.slice(at + 1)).find((item) => item.group)?.group
-        if (into) movePage(entry, into.name, { focus: true, reveal: !pinned })
+        if (into) movePage(entry, into.name, { at: arranged ? (up ? 'end' : 0) : undefined, focus: true, reveal: !pinned })
       },
       'aria-keyshortcuts': moves ? 'Alt+ArrowUp Alt+ArrowDown F2 Shift+F10' : 'F2 Shift+F10',
       'aria-describedby': `${id}-edit`,
@@ -683,7 +879,7 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
     const target = { kind: 'group', name }
     return {
       ...(orderable && {
-        draggable: !pendingOrder,
+        draggable: true,
         onDragStart: (event) => {
           event.dataTransfer.effectAllowed = 'move'
           event.dataTransfer.setData('text/plain', name)
@@ -704,28 +900,33 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
         event.preventDefault()
         const from = top.findIndex((item) => item.group?.name === name)
         const at = event.key === 'ArrowUp' ? from - 1 : from + 2
-        if (pendingOrder || from < 0 || at < 0 || at > top.length) return
+        if (from < 0 || at < 0 || at > top.length) return
         movedGroup.current = name
         moveTop(from, at)
       },
     }
   }
-  // The line shows where the dragged item lands, beside the item of the top of the list at `index`.
+  // The line shows where the dragged item lands: beside the item of the top of the list at `index`, or — a page
+  // among the pages of a group — above the group's page at `slot.at`, or below its last one.
   const dropMarker = (index) => drop?.index === index ? (drop.side === 'before' ? styles.dropBefore : styles.dropAfter) : ''
+  const slotMarker = (slot) => !slot || drop?.group !== slot.group ? '' : drop.at === slot.at ? styles.dropBefore : slot.last && drop.at === slot.at + 1 ? styles.dropAfter : ''
 
   // A page row: the link, and for a signed-in reader the pin at its end. In the Pinned group (`index` is the row's
   // place there) the link also names the page's own group, since pages of different groups often share a title. A
-  // page outside any group, at the top of the list (`place` its index there), is marked for dragging with data-loose.
-  const documentRow = (entry, index, { archived = false, withGroup = false, place } = {}) => {
+  // page outside any group, at the top of the list (`place` its index there), is marked for dragging with data-loose;
+  // a page listed in its group (`slot`: the group, the page's place `at` there, and whether it is the `last`), with
+  // data-row.
+  const documentRow = (entry, index, { archived = false, withGroup = false, place, slot } = {}) => {
     const pinned = pinnedSlugs.includes(entry.slug)
     const inPinned = index !== undefined
     const context = (inPinned || withGroup) && entry.group
     const edited = editing?.slug === entry.slug && editing.pinned === inPinned && editing.field
     // At the top of the list a page shares the keys of the groups beside it.
     const key = place === undefined ? entry.slug : `page:${entry.slug}`
-    const loose = place === undefined ? {} : { 'data-loose': entry.slug }
+    const mark = place !== undefined ? { 'data-loose': entry.slug } : slot ? { 'data-row': entry.slug } : {}
+    const marker = place !== undefined ? dropMarker(place) : slotMarker(slot)
     if (edited === 'title') return (
-      <div key={key} className={styles.documentRow} {...loose}>
+      <div key={key} className={styles.documentRow} {...mark}>
         <form className={styles.renameForm} onSubmit={(event) => { event.preventDefault(); endRename(entry, editInput.current?.value, true) }}>
           <Icon name="file" size={16} />
           <input ref={editInput} className={styles.renameInput} defaultValue={entry.title} maxLength={200} autoFocus
@@ -736,7 +937,7 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
       </div>
     )
     const row = (
-      <div key={key} {...(edited ? {} : loose)} className={`${styles.documentRow} ${authed && !archived ? styles.pinnableRow : ''} ${editable ? styles.editableRow : ''} ${pinned ? styles.pinnedRow : ''} ${archived ? styles.archivedRow : ''} ${dragged?.page === entry.slug ? styles.draggingPage : ''} ${menu?.kind === 'page' && menu.entry.slug === entry.slug && (menu.index !== undefined) === inPinned ? styles.menuRow : ''} ${place === undefined || edited ? '' : dropMarker(place)}`}>
+      <div key={key} {...(edited ? {} : mark)} className={`${styles.documentRow} ${authed && !archived ? styles.pinnableRow : ''} ${editable ? styles.editableRow : ''} ${pinned ? styles.pinnedRow : ''} ${archived ? styles.archivedRow : ''} ${dragged?.page === entry.slug ? styles.draggingPage : ''} ${arrived === entry.slug && !inPinned ? styles.arrivedRow : ''} ${menu?.kind === 'page' && menu.entry.slug === entry.slug && (menu.index !== undefined) === inPinned ? styles.menuRow : ''} ${edited ? '' : marker}`}>
         <a href={pageHref(entry)} data-doc={entry.slug}
           className={`${styles.documentLink} ${entry.slug === doc?.slug ? styles.currentDocument : ''}`}
           aria-current={entry.slug === doc?.slug ? 'page' : undefined} onClick={followLink} {...pageHandlers(entry, inPinned, index, archived)}>
@@ -752,7 +953,7 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
     // The name of a new group for the page is typed above it, in a field in the shape of a group's heading: the group
     // as it will be, with the page in it.
     if (edited === 'group') return (
-      <div key={key} className={`${styles.newGroup} ${place === undefined ? '' : dropMarker(place)}`} {...loose}>
+      <div key={key} className={`${styles.newGroup} ${marker}`} {...mark}>
         <form className={styles.newGroupForm} onSubmit={(event) => { event.preventDefault(); endNewGroup(entry, editInput.current?.value, true) }}>
           <span className={`${styles.groupCaret} ${styles.groupExpanded}`}><Icon name="chevronRight" size={14} /></span>
           <input ref={editInput} className={`${styles.renameInput} ${styles.groupNameInput}`} placeholder="Group name" maxLength={200} autoFocus
@@ -814,8 +1015,9 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
         </div>}
       </div>
       {reorderable && <p id={`${id}-reorder`} className={styles.visuallyHidden}>Drag a group, or press Alt with the up or down arrow, to move it among the groups and the pages outside any group, for everyone.</p>}
-      {editable && <p id={`${id}-edit`} className={styles.visuallyHidden}>{movable ? 'Drag a page onto another group, or press Alt with the up or down arrow, to move it there. A page outside any group can also be dragged between the groups and the other pages. ' : ''}Press F2 to rename a page, or Shift+F10 for its menu, which also archives it, and puts a page outside any group into a new group. Shift+F10 on a group opens the group's menu.</p>}
+      {editable && <p id={`${id}-edit`} className={styles.visuallyHidden}>Drag a page to another place among the pages of its group, into another group, or between the groups to take it out of its group. Alt with the up or down arrow moves it a place up or down, and on into the next group. Press F2 to rename a page, or Shift+F10 for its menu, which also moves it into a new group, takes it out of its group, and archives it. Shift+F10 on a group opens the group's menu.</p>}
       {orderError && <p className={styles.navigationError} role="alert">{orderError}</p>}
+      {hint && !orderError && <p className={styles.navigationNote} role="status">{hint}</p>}
       <span className={styles.visuallyHidden} role="status">{copied ? 'Link copied' : ''}</span>
       <nav className={styles.documentNavigation} ref={navRef} aria-label="Project documents" {...listDragHandlers}>
         {top.length === 0 && <p className={styles.navigationEmpty}>No documents yet.</p>}
@@ -838,7 +1040,7 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
               <span className={styles.groupCount}>{group.items.length}</span>
             </button>
             {!collapsed.has(group.name) && <div id={`${id}-group-${index}`} className={styles.groupItems}>
-              {group.items.map((entry) => documentRow(entry))}
+              {group.items.map((entry, at) => documentRow(entry, undefined, { slot: { group: group.name, at, last: at === group.items.length - 1 } }))}
             </div>}
           </div>
         ))}
@@ -888,9 +1090,19 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
             onClick={() => { const { entry, index } = menu; closeMenu(false); startEdit(entry, index !== undefined, 'title') }}>
             <Icon name="edit" size={14} /><span>Rename</span><kbd className={styles.pageMenuKey} aria-hidden="true">F2</kbd>
           </button>}
-          {menu.kind === 'page' && !menu.entry.group && !archivedDocs.has(menu.entry.slug) && <button type="button" role="menuitem" className={styles.pageMenuItem}
+          {menu.kind === 'page' && !archivedDocs.has(menu.entry.slug) && !inArchivedGroup(menu.entry) && <button type="button" role="menuitem" className={styles.pageMenuItem}
             onClick={() => { const { entry, index } = menu; closeMenu(false); startEdit(entry, index !== undefined, 'group') }}>
-            <Icon name="folderPlus" size={14} /><span>Add to new group</span>
+            <Icon name="folderPlus" size={14} /><span>Move to new group</span>
+          </button>}
+          {menu.kind === 'page' && menu.entry.group && !archivedDocs.has(menu.entry.slug) && !inArchivedGroup(menu.entry) && <button type="button" role="menuitem" className={styles.pageMenuItem}
+            onClick={() => {
+              // The page lands right below the group it leaves. Its row in the Pinned group stays, with focus.
+              const { entry, index } = menu
+              const inPinned = index !== undefined
+              closeMenu(inPinned)
+              ungroupPage(entry, top.findIndex((item) => item.group?.name === entry.group) + 1, { focus: !inPinned, reveal: !inPinned })
+            }}>
+            <Icon name="folderOutput" size={14} /><span>Remove from group</span>
           </button>}
           {menu.kind === 'page' && !archivedDocs.has(menu.entry.slug) && !inArchivedGroup(menu.entry) && <button type="button" role="menuitem" className={styles.pageMenuItem}
             onClick={() => {

@@ -118,16 +118,22 @@ curl -s -b /tmp/moa.jar -X POST http://localhost:5001/api/order \
 The top of a project's sidebar list holds its groups and the pages outside any group. By default the groups come
 first, by `order`, and the pages outside any group after them. An admin drags a group onto the place of another item
 there — a group or a page outside any group — or focuses a group and presses Alt+↑/↓ to move it one place. A page
-outside any group is dragged there too: onto the top edge of a group's heading to go above the group (the bottom
-edge of a closed group's heading to go below it), onto the upper or lower half of another such page to go above or
-below it, or into the gap between two items; dropped on the middle of a group's heading or on its pages, it joins
-the group instead (see "Renaming pages and moving them to another group" below). The arrangement is saved at once
+is dragged there too, out of its group when it was in one: onto the top edge of a group's heading to go above the
+group (the bottom edge of a closed group's heading to go below it), onto the upper or lower half of a page outside
+any group to go above or below it, or into the gap between two items; dropped on the middle of a group's heading or
+on its pages, it joins the group instead (see "Renaming and moving pages" below). The arrangement is saved at once
 under `registry.groupOrder[slug]` and shown to every reader: saved items first, as saved; a group not in it after the
 last saved group, by `order`; a page outside any group not in it at the end. What is saved is the list down to the
 last group, the moved item, or a page saved before, so pages outside any group below that are left out: they keep
 following the sort menu, like a new page. The sidebar's sort menu orders the pages inside each group and the pages
 outside any group that are left out, and never moves a group or a saved page. Only the project's current group names
 and `{ "doc": slug }` items for its pages outside any group are kept; `[]` resets to the default.
+
+A group that isn't in the saved order has its place by the `order` of its first page, so a page that changes groups
+could carry a group to another place. The sidebar keeps the groups where they stand: when a page's move would shift
+them — or when a new group, or a page taken out of its group, wouldn't stand where it is put — it saves the top of
+the list along with the move, from its start as far down as it takes. What stands below keeps following `order` and
+the sort menu, so a group written later still finds its place among the groups nobody arranged.
 
 ```bash
 curl -s -b /tmp/moa.jar -X POST http://localhost:5001/api/order/groups \
@@ -151,24 +157,38 @@ curl -s -b /tmp/moa.jar -X POST http://localhost:5001/api/pin \
   -H 'Content-Type: application/json' -d '{"slug":"my-project","doc":"weekly-report","pinned":true}'
 ```
 
-### Renaming pages and moving them to another group
+### Renaming and moving pages
 
 An admin renames a page from its menu — a right click on its row, a long press on a touch screen, or Shift+F10 on
 its link — or with F2 on the link: Enter or leaving the field saves, Esc keeps the old title. The menu also opens
 the page in a new tab (one of moa's own, see "Tabs" below) or a new window and copies its link (what the browser's
 own link menu offered before the menu took the right click; a right click with Shift held still opens the browser's
-menu), and pins or archives the page. A page dragged onto another group moves into it (or Alt+↑/↓ on its link, one group up or
-down — for a page outside any group, the nearest group above or below it); a closed group opens to show it arrive.
-A page in a group dropped anywhere else stays where it is. A page outside any group also has Add to new group in its
-menu: the group's name is typed in a field above the page (Enter or leaving the field moves the page into it, Esc or
-no name leaves it out), and the new group takes its place like any group the saved order doesn't hold — by `order`,
-or after the last saved group. A name some group already has puts the page in that group; an archived group's is refused,
-as the page would be archived with it. Both are saved at once in the page's `.mdx` — its `export const title`
-or `group` literal is rewritten where it stands (a missing group goes on the line after the title) and the rest of the
-file is kept byte for byte — so every open reader sees the change through the usual live reload. The text is kept on
-one line, at most 200 characters, without a backslash, between quotes it doesn't contain (`'` or `"`; a backtick only
-for text with both). A page that sets its title or group in code, and a demo project, can't be changed this way.
-A tool that regenerates a page writes its own title and group back.
+menu), moves the page into a new group or out of its group, and pins or archives it.
+
+An admin moves a page by dragging it, with Alt+↑/↓ on its link, or from its menu:
+
+- **Inside its group.** Dragged over the pages of its group, a page goes above the page whose upper half it is
+  dropped on, or below the one whose lower half; a line shows the place. Alt+↑/↓ moves it one place up or down.
+- **Into another group.** Dropped among that group's pages, it goes to that place; dropped on the group's heading,
+  it becomes the group's last page, and a closed group opens to show it arrive. Alt+↑ on the first page of a group
+  takes it into the group above, as its last page; Alt+↓ on the last page, into the group below, as its first. A
+  page outside any group goes into the nearest group above or below it the same way.
+- **Into a new group.** Move to new group in the menu: the group's name is typed in a field above the page (Enter
+  or leaving the field moves the page into it; Esc, no name, or the name of the group it is in leaves it there).
+  The new group gets a place of its own: right below the group the page left (in that group's place, when the page
+  was its only one); in the page's own place, when it stood outside any group where an admin had put it; or right
+  above the pages outside any group that follow the sort menu. A name some group already has puts the page at the
+  end of that group; an archived group's is refused, as the page would be archived with it.
+- **Out of its group.** Remove from group in the menu puts the page right below the group it leaves, at the top of
+  the list; dragged between the groups, it goes where it is dropped. Its place is saved like that of any page
+  outside any group ("Sidebar group order" above). A group left without a page is gone.
+
+A title and a group are saved at once in the page's `.mdx` — its `export const title` or `group` literal is
+rewritten where it stands (a missing group goes on the line after the title) and the rest of the file is kept byte
+for byte — so every open reader sees the change through the usual live reload. The text is kept on one line, at
+most 200 characters, without a backslash, between quotes it doesn't contain (`'` or `"`; a backtick only for text
+with both). A page that sets its title or group in code, and a demo project, can't be changed this way. A tool that
+regenerates a page writes its own title and group back.
 
 ```bash
 curl -s -b /tmp/moa.jar -X POST http://localhost:5001/api/doc/update \
@@ -176,6 +196,19 @@ curl -s -b /tmp/moa.jar -X POST http://localhost:5001/api/doc/update \
 ```
 
 Send `title`, `group` or both; `"group": ""` takes the page out of its group.
+
+The place of a page among the pages of its group is saved in the registry, under `pageOrder[slug][group]`, as the
+file names of the group's pages in order; the files are not touched. Those pages come first, as saved, and a page
+not among them — written into the group since — follows them, by `order`. That is the sort menu's Default order.
+Sorted by name or by last update, no page has a place of its own: a page dropped among the pages of its own group
+goes nowhere (the list says why), one dropped on another group joins it where the sort puts it, and Alt+↑/↓ takes
+it straight into the next group. Only the pages the group holds are kept, once each; `[]` goes back to the pages'
+`order`.
+
+```bash
+curl -s -b /tmp/moa.jar -X POST http://localhost:5001/api/order/pages \
+  -H 'Content-Type: application/json' -d '{"slug":"my-project","group":"Reports","docs":["week-12","week-11","summary"]}'
+```
 
 Sort rule (`lib/content.mjs`): `order` ascending → missing = 99 → title `localeCompare`.
 A `title` in `registry.json` overrides `_meta.json`.
@@ -294,8 +327,8 @@ page sticks under the strip with `top: var(--moa-tabs-h)` (0 without the strip).
      **literals only** (the sidebar index parses them with a regex). An admin's rename or move in the sidebar
      rewrites the `title` / `group` literal in the file, so read a page again before rewriting it
    - Sidebar groups by `group`, sorts by `order` ascending — the groups first, then the pages without a
-     `group`, unless an admin dragged them into another arrangement ("Sidebar group order" above), and
-     below the reader's own Pinned group ("Pinned pages" above). Readers can sort the pages inside each group by
+     `group`, unless an admin dragged them into another arrangement ("Sidebar group order" above; the pages
+     inside a group, "Renaming and moving pages"), and below the reader's own Pinned group ("Pinned pages" above). Readers can sort the pages inside each group by
      title (numeric-aware) or by file mtime from the sidebar's sort menu; the choice is kept per
      project in the browser
    - For registered external projects, write the `.mdx` into the original folder

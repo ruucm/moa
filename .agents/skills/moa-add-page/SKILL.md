@@ -39,10 +39,11 @@ Body…
   (`export const order = 10` works; `export const order = N + 1` does not)
 - The sidebar groups by `group` and sorts by `order` ascending within each group (missing → 99 → title order).
   If an admin has dragged the project's groups into an order (`registry.json` `groupOrder`), those groups
-  come first and a new group follows them, by `order`. Each reader's pinned pages (`pins.json`) also show
+  come first and a new group follows them, by `order`. Likewise, if an admin has dragged the pages of a group
+  into an order (`registry.json` `pageOrder`), those pages come first and a new page follows them, by `order`. Each reader's pinned pages (`pins.json`) also show
   in their own Pinned group above all groups; a pin goes by the file name, so renaming a file unpins it
-- An admin can rename a page or move it to another group from the sidebar (the row's right-click menu or F2, or a
-  drag onto the group). That menu also opens the page in a new tab or window and copies its link; Shift + right
+- An admin can rename a page or move it to another group, a new group, or out of its group from the sidebar (the
+  row's right-click menu or F2, or a drag). That menu also opens the page in a new tab or window and copies its link; Shift + right
   click still gives the browser's own menu.
   That rewrites the `title` / `group` literal in the file, so read the page again before you rewrite it — a page
   written from a stale copy puts the old title and group back

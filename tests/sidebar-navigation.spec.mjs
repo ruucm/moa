@@ -16,9 +16,10 @@ const lastPageSlug = `mock-episode-${lastEpisode}-p${pages.length - 1}`
 // `episodes` is the default (order-meta) sequence; `updated` gives a group's newest file time, and
 // `age(p)` how much older than that its p-th page is. `titles` are the pages of every group.
 // `saved.groups` and `saved.pins` stand for the group order and the pinned pages stored for the project,
-// `saved.archived` for its archived pages and groups ({ groups, docs }), and `saved.docs` for titles and groups
-// saved in the pages' files ({ [slug]: { title?, group? } }); the index reads them on every request. `member` opens
-// the project as an invited reader, not an admin.
+// `saved.pages` for the order of the pages inside its groups ({ [group]: [slugs] }), `saved.archived` for its
+// archived pages and groups ({ groups, docs }), and `saved.docs` for titles and groups saved in the pages' files
+// ({ [slug]: { title?, group? } }); the index reads them on every request. `member` opens the project as an invited
+// reader, not an admin.
 const openLongProject = async (page, { episodes = sequential, expanded = [], updated = {}, doc = 'overview', saved = {}, titles = pages, age = p => p * 1000, member = false } = {}) => {
   await login(page)
   await page.route('**/api/claude', route => route.fulfill({ json: { 'moa-design': { skills: [], agents: [] } } }))
@@ -29,7 +30,7 @@ const openLongProject = async (page, { episodes = sequential, expanded = [], upd
   const docs = [{ ...overview, group: '' }, ...episodes.flatMap((number, g) => titles.map((title, p) => ({
     slug: `mock-episode-${number}-p${p}`, title, group: groupName(number), order: g * 20 + p, mtime: updated[number] ? updated[number] - age(p) : null,
   })))]
-  await page.route('**/api/projects', route => route.fulfill({ json: { ...index, owner: !member, member, projects: index.projects.map(entry => entry.slug === 'moa-design' ? { ...entry, docs: docs.map(doc => ({ ...doc, ...saved.docs?.[doc.slug] })), groupOrder: saved.groups, pins: saved.pins, archived: saved.archived } : entry) } }))
+  await page.route('**/api/projects', route => route.fulfill({ json: { ...index, owner: !member, member, projects: index.projects.map(entry => entry.slug === 'moa-design' ? { ...entry, docs: docs.map(doc => ({ ...doc, ...saved.docs?.[doc.slug] })), groupOrder: saved.groups, pageOrder: saved.pages, pins: saved.pins, archived: saved.archived } : entry) } }))
   const collapsed = episodes.filter(number => !expanded.includes(number)).map(groupName)
   // Set once per test, so a reload keeps what the reader opened or closed since.
   await page.addInitScript(names => { if (localStorage.getItem('hub.collapsed.moa-design') === null) localStorage.setItem('hub.collapsed.moa-design', JSON.stringify(names)) }, collapsed)
@@ -435,9 +436,10 @@ test('on a touch screen every pin stays in view as a full-size target, and a lon
   }
 })
 
-// An admin drags a page onto another group, or moves it a group up or down with Alt+arrow keys, and edits its title
-// from the page menu (a right click, a long press, or Shift+F10 on the link) or with F2. Each change is saved in the
-// page's file (mocked here) and shows at once.
+// An admin drags a page to another place — among the pages of its group, into another group, or out of its group —
+// or moves it with Alt+arrow keys, and edits its title from the page menu (a right click, a long press, or Shift+F10
+// on the link) or with F2. A change of group or title is saved in the page's file, and the order of a group's pages
+// in the registry (both mocked here); each shows at once.
 const mockPageSaves = async (page, saved, posts, respond = () => ({ json: { ok: true } })) => {
   await page.route('**/api/doc/update', async route => {
     const body = route.request().postDataJSON()
@@ -450,99 +452,245 @@ const mockPageSaves = async (page, saved, posts, respond = () => ({ json: { ok: 
     return route.fulfill(reply)
   })
 }
+// The order of the pages inside a group, as the page order API would keep it for the project.
+const mockPageOrder = async (page, saved, posts, respond = () => ({ json: { ok: true } })) => {
+  await page.route('**/api/order/pages', async route => {
+    const body = route.request().postDataJSON()
+    posts.push(body)
+    const reply = await respond(body)
+    if (!reply.status) saved.pages = { ...saved.pages, [body.group]: body.docs }
+    return route.fulfill(reply)
+  })
+}
 // The groups a page is listed in, outside the Pinned group (none while its group is closed).
 const groupsOf = (navigation, slug) => navigation.evaluate((nav, slug) => [...nav.querySelectorAll('a[data-doc]')]
   .filter(link => link.dataset.doc === slug && link.closest('[data-group]'))
   .map(link => link.closest('[data-group]').dataset.group), slug)
 const pageLink = (navigation, slug) => navigation.locator(`[data-group] a[data-doc="${slug}"]`)
+// A page's row in its group, and the pages a group lists, in its order, by file name.
+const rowOf = (navigation, slug) => navigation.locator(`[data-group] [data-row="${slug}"]`)
+const pagesIn = (navigation, name) => navigation.locator(`[data-group="${name}"] [data-row]`).evaluateAll(rows => rows.map(row => row.dataset.row))
+const slugsOf = (number, count = pages.length) => Array.from({ length: count }, (_, p) => pageSlug(number, p))
+// Short groups, so both ends of every drag stay in view (a drag that scrolls the list picks up another row).
+const few = pages.slice(0, 4)
 
-test('dragging a page onto another group moves it there and saves its group', async ({ page }) => {
+test('pages are dragged into another order inside their group, and the order is saved', async ({ page }) => {
+  const saved = {}
+  const orders = []
+  const moves = []
+  await mockPageOrder(page, saved, orders)
+  await mockPageSaves(page, saved, moves)
+  const navigation = await openLongProject(page, { episodes: ['105', '106'], expanded: ['106'], titles: few, saved })
+  const group = groupName('106')
+  const [script, draft, still, pilot] = slugsOf('106', 4)
+  const sortControl = page.getByRole('combobox', { name: 'Sort pages in each group', exact: true })
+  const hint = page.getByRole('status').filter({ hasText: 'Sorted by' })
+  expect(await pagesIn(navigation, group)).toEqual([script, draft, still, pilot])
+  await expect(pageLink(navigation, pilot)).toHaveAttribute('draggable', 'true')
+
+  // Held over the upper half of another page of its group, a page shows a line above that page; dropped, it takes
+  // that place.
+  const from = await pageLink(navigation, pilot).boundingBox()
+  const to = await rowOf(navigation, draft).boundingBox()
+  await page.mouse.move(from.x + 40, from.y + from.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(to.x + 40, to.y + 6, { steps: 5 })
+  await expect(rowOf(navigation, draft)).toHaveClass(/dropBefore/)
+  await page.mouse.up()
+  await expect.poll(() => pagesIn(navigation, group)).toEqual([script, pilot, draft, still])
+  await expect(rowOf(navigation, draft)).not.toHaveClass(/dropBefore/)
+  expect(orders).toEqual([{ slug: 'moa-design', group, docs: [script, pilot, draft, still] }])
+  await page.reload()
+  await expect.poll(() => pagesIn(navigation, group)).toEqual([script, pilot, draft, still])
+
+  // On the lower half of the last page, it goes below it.
+  const { height } = await rowOf(navigation, still).boundingBox()
+  await pageLink(navigation, script).dragTo(rowOf(navigation, still), { targetPosition: { x: 40, y: height - 4 } })
+  await expect.poll(() => pagesIn(navigation, group)).toEqual([pilot, draft, still, script])
+  expect(orders.at(-1)).toEqual({ slug: 'moa-design', group, docs: [pilot, draft, still, script] })
+
+  // Dropped where it already is — on itself, or on the near half of the page beside it — nothing moves or is saved.
+  const own = await pageLink(navigation, draft).boundingBox()
+  await page.mouse.move(own.x + 40, own.y + 12)
+  await page.mouse.down()
+  await page.mouse.move(own.x + 40, own.y + own.height - 12, { steps: 3 })
+  await page.mouse.up()
+  await pageLink(navigation, draft).dragTo(rowOf(navigation, pilot), { targetPosition: { x: 40, y: height - 4 } })
+  await pageLink(navigation, draft).dragTo(rowOf(navigation, still), { targetPosition: { x: 40, y: 4 } })
+  await page.waitForTimeout(300)
+  expect(orders).toHaveLength(2)
+  expect(moves).toEqual([])
+
+  // A page that is not in the saved order — written into the group since — follows the arranged pages, by its
+  // order meta.
+  saved.pages = { [group]: [still, pilot] }
+  await page.reload()
+  await expect.poll(() => pagesIn(navigation, group)).toEqual([still, pilot, script, draft])
+
+  // Sorted by name, no page has a place of its own: a page dropped among the pages of its group goes nowhere, and
+  // the list says why. A page dropped on another group still joins it, where the sort puts it — only its group is
+  // saved. Back in the default order the note is gone and the pages stand as they were arranged.
+  await sortControl.selectOption('name')
+  await expect.poll(() => pagesIn(navigation, group)).toEqual([script, draft, still, pilot])
+  await pageLink(navigation, script).dragTo(rowOf(navigation, pilot), { targetPosition: { x: 40, y: 4 } })
+  await expect(hint).toHaveText('Sorted by name. Choose “Default order” to arrange pages by hand.')
+  expect(await pagesIn(navigation, group)).toEqual([script, draft, still, pilot])
+  await pageLink(navigation, draft).dragTo(navigation.getByRole('button', { name: groupButton('105') }))
+  await expect.poll(() => groupsOf(navigation, draft)).toEqual([groupName('105')])
+  await expect(hint).toHaveCount(0)
+  await expect.poll(() => moves).toEqual([{ slug: 'moa-design', doc: draft, group: groupName('105') }])
+  expect(orders).toHaveLength(2)
+  await sortControl.selectOption('order')
+  await expect.poll(() => pagesIn(navigation, group)).toEqual([still, pilot, script])
+
+  // A failed save puts the pages back and says why.
+  await page.unroute('**/api/order/pages')
+  await mockPageOrder(page, saved, orders, () => ({ status: 500, json: { error: '검수용 저장 실패' } }))
+  await pageLink(navigation, script).dragTo(rowOf(navigation, still), { targetPosition: { x: 40, y: 4 } })
+  await expect(page.getByRole('alert').filter({ hasText: '검수용 저장 실패' })).toBeVisible()
+  await expect.poll(() => pagesIn(navigation, group)).toEqual([still, pilot, script])
+})
+
+test('dragging a page onto another group moves it there, to the place it is dropped at, and saves its group', async ({ page }) => {
   const saved = {}
   const posts = []
+  const orders = []
   await mockPageSaves(page, saved, posts)
-  const navigation = await openLongProject(page, { episodes: ['105', '106', '100'], expanded: ['106'], saved })
+  await mockPageOrder(page, saved, orders)
+  const navigation = await openLongProject(page, { episodes: ['105', '106', '100'], expanded: ['106'], titles: few, saved })
   const toggle = number => navigation.getByRole('button', { name: groupButton(number) })
-  const still = pageSlug('106', 2)
+  const [script, draft, still, pilot] = slugsOf('106', 4)
+  const others = slugsOf('105', 4)
   await expect(pageLink(navigation, still)).toHaveAttribute('draggable', 'true')
 
-  // Dropped on a closed group, the page joins it and the group opens to show it there.
+  // Dropped on a closed group's heading, the page joins the group as its last page, and the group opens to show it
+  // there.
   await pageLink(navigation, still).dragTo(toggle('105'))
   await expect(toggle('105')).toHaveAttribute('aria-expanded', 'true')
   await expect.poll(() => groupsOf(navigation, still)).toEqual([groupName('105')])
-  await expect(toggle('105')).toHaveText(`${groupName('105')}${pages.length + 1}`)
-  await expect(toggle('106')).toHaveText(`${groupName('106')}${pages.length - 1}`)
+  await expect(toggle('105')).toHaveText(`${groupName('105')}${few.length + 1}`)
+  await expect(toggle('106')).toHaveText(`${groupName('106')}${few.length - 1}`)
   await expect.poll(() => posts).toEqual([{ slug: 'moa-design', doc: still, group: groupName('105') }])
+  await expect.poll(() => orders).toEqual([{ slug: 'moa-design', group: groupName('105'), docs: [...others, still] }])
+  expect(await pagesIn(navigation, groupName('105'))).toEqual([...others, still])
   await page.reload()
-  await expect.poll(() => groupsOf(navigation, still)).toEqual([groupName('105')])
+  await expect.poll(() => pagesIn(navigation, groupName('105'))).toEqual([...others, still])
 
-  // Dropped on the group it is in, or outside any group, it stays where it is.
+  // Dropped on the heading of the group it is in, it stays where it is.
   await pageLink(navigation, still).dragTo(toggle('105'))
-  await pageLink(navigation, pageSlug('106', 0)).dragTo(navigation.getByRole('link', { name: '더 명확하게, 더 편안하게', exact: true }))
   await page.waitForTimeout(300)
   expect(posts).toHaveLength(1)
-  expect(await groupsOf(navigation, pageSlug('106', 0))).toEqual([groupName('106')])
+  expect(orders).toHaveLength(1)
+
+  // Dropped among the pages of another group, it goes to that place: above the page whose upper half it is
+  // dropped on.
+  const arranged = [others[0], draft, ...others.slice(1), still]
+  await pageLink(navigation, draft).dragTo(rowOf(navigation, others[1]), { targetPosition: { x: 40, y: 4 } })
+  await expect.poll(() => pagesIn(navigation, groupName('105'))).toEqual(arranged)
+  await expect.poll(() => posts.at(-1)).toEqual({ slug: 'moa-design', doc: draft, group: groupName('105') })
+  await expect.poll(() => orders.at(-1)).toEqual({ slug: 'moa-design', group: groupName('105'), docs: arranged })
+  expect(await pagesIn(navigation, groupName('106'))).toEqual([script, pilot])
 
   // A page in the Pinned group can be dragged too; it stays pinned, under its new group's name.
-  saved.pins = [pageSlug('106', 3)]
+  saved.pins = [pilot]
   await page.reload()
   const pinned = pinnedGroup(navigation).locator('a').first()
   await pinned.dragTo(toggle('105'))
-  await expect.poll(() => groupsOf(navigation, pageSlug('106', 3))).toEqual([groupName('105')])
+  await expect.poll(() => groupsOf(navigation, pilot)).toEqual([groupName('105')])
   await expect(pinned).toHaveText(`P2 · 파일럿 ${groupName('105')}`)
-  await expect.poll(() => posts.at(-1)).toEqual({ slug: 'moa-design', doc: pageSlug('106', 3), group: groupName('105') })
+  await expect.poll(() => posts.at(-1)).toEqual({ slug: 'moa-design', doc: pilot, group: groupName('105') })
+  await expect.poll(() => orders.at(-1)).toEqual({ slug: 'moa-design', group: groupName('105'), docs: [...arranged, pilot] })
 
-  // A failed save puts the page back and says why. (105 closes first, so both ends of the drag fit in the list.)
+  // A failed save puts the page back and says why; the place it was dropped at is not saved either.
   await page.unroute('**/api/doc/update')
   await mockPageSaves(page, saved, posts, () => ({ status: 500, json: { error: '검수용 저장 실패' } }))
-  await toggle('105').click()
-  await expect(toggle('105')).toHaveAttribute('aria-expanded', 'false')
-  await pageLink(navigation, pageSlug('106', 5)).dragTo(toggle('105'))
+  await pageLink(navigation, script).dragTo(toggle('100'))
   await expect(page.getByRole('alert').filter({ hasText: '검수용 저장 실패' })).toBeVisible()
-  await expect.poll(() => groupsOf(navigation, pageSlug('106', 5))).toEqual([groupName('106')])
+  await expect.poll(() => groupsOf(navigation, script)).toEqual([groupName('106')])
+  expect(orders).toHaveLength(3)
 })
 
-test('a page moves a group up or down and is renamed from the keyboard, keeping focus', async ({ page }) => {
+test('a page moves up or down from the keyboard, through its group and on into the next, and is renamed, keeping focus', async ({ page }) => {
   const saved = {}
   const posts = []
+  const orders = []
+  const tops = []
   await mockPageSaves(page, saved, posts)
-  const navigation = await openLongProject(page, { episodes: ['105', '106', '100'], expanded: ['105', '106'], saved })
-  const pilot = pageSlug('106', 3)
+  await mockPageOrder(page, saved, orders)
+  await mockOrder(page, saved, tops)
+  const navigation = await openLongProject(page, { episodes: ['105', '106', '100'], expanded: ['105', '106'], titles: few.slice(0, 3), saved })
+  const sortControl = page.getByRole('combobox', { name: 'Sort pages in each group', exact: true })
+  const [first, second, third] = slugsOf('106', 3)
+  const group = groupName('106')
 
-  // Alt+Down moves it into the next group, which opens; focus goes along.
-  await pageLink(navigation, pilot).focus()
+  // Alt+Down moves the page a place down among the pages of its group; focus goes along.
+  await pageLink(navigation, first).focus()
   await page.keyboard.press('Alt+ArrowDown')
-  await expect.poll(() => groupsOf(navigation, pilot)).toEqual([groupName('100')])
-  await expect(pageLink(navigation, pilot)).toBeFocused()
+  await expect.poll(() => pagesIn(navigation, group)).toEqual([second, first, third])
+  await expect(pageLink(navigation, first)).toBeFocused()
+  await page.keyboard.press('Alt+ArrowDown')
+  await expect.poll(() => pagesIn(navigation, group)).toEqual([second, third, first])
+  await expect(pageLink(navigation, first)).toBeFocused()
+  await expect.poll(() => orders).toEqual([[second, first, third], [second, third, first]].map(docs => ({ slug: 'moa-design', group, docs })))
+  expect(posts).toEqual([])
+
+  // From the last place, Alt+Down takes it into the group below — which opens — as its first page.
+  await page.keyboard.press('Alt+ArrowDown')
+  await expect.poll(() => pagesIn(navigation, groupName('100'))).toEqual([first, ...slugsOf('100', 3)])
+  await expect(pageLink(navigation, first)).toBeFocused()
+  await expect.poll(() => posts).toEqual([{ slug: 'moa-design', doc: first, group: groupName('100') }])
+  await expect.poll(() => orders.at(-1)).toEqual({ slug: 'moa-design', group: groupName('100'), docs: [first, ...slugsOf('100', 3)] })
+  // The groups stay where they stand. With no order saved, the group it joined would now go by the order meta of this
+  // page, above the group it left — so the top of the list is saved as it stands, as far down as it takes: the group
+  // it joined follows the two above it by itself.
+  await expect.poll(() => tops).toEqual([{ slug: 'moa-design', groups: ['105', '106'].map(groupName) }])
+  expect(await topOrder(navigation)).toEqual(['105', '106', '100', 'overview'])
+  // From the first place, Alt+Up takes it into the group above, as its last page.
   await page.keyboard.press('Alt+ArrowUp')
-  await expect.poll(() => groupsOf(navigation, pilot)).toEqual([groupName('106')])
-  await expect(pageLink(navigation, pilot)).toBeFocused()
-  await expect.poll(() => posts).toEqual([groupName('100'), groupName('106')].map(group => ({ slug: 'moa-design', doc: pilot, group })))
-  // There is no group above the first one.
+  await expect.poll(() => pagesIn(navigation, group)).toEqual([second, third, first])
+  await expect(pageLink(navigation, first)).toBeFocused()
+  await expect.poll(() => posts.at(-1)).toEqual({ slug: 'moa-design', doc: first, group })
+  await expect.poll(() => orders).toHaveLength(4)
+  // There is no place above the first page of the first group, nor below the last page of the last.
   await pageLink(navigation, pageSlug('105', 0)).focus()
   await page.keyboard.press('Alt+ArrowUp')
+  await pageLink(navigation, pageSlug('100', 2)).focus()
+  await page.keyboard.press('Alt+ArrowDown')
   await page.waitForTimeout(300)
   expect(posts).toHaveLength(2)
+  expect(orders).toHaveLength(4)
+
+  // Sorted by name, the arrows take the page straight into the group above or below; only its group is saved.
+  await sortControl.selectOption('name')
+  await pageLink(navigation, second).focus()
+  await page.keyboard.press('Alt+ArrowUp')
+  await expect.poll(() => groupsOf(navigation, second)).toEqual([groupName('105')])
+  await expect(pageLink(navigation, second)).toBeFocused()
+  await expect.poll(() => posts.at(-1)).toEqual({ slug: 'moa-design', doc: second, group: groupName('105') })
+  expect(orders).toHaveLength(4)
+  await sortControl.selectOption('order')
 
   // F2 opens the title for editing; Enter saves it and gives focus back to the page.
-  await pageLink(navigation, pilot).focus()
+  await pageLink(navigation, third).focus()
   await page.keyboard.press('F2')
-  const field = navigation.getByRole('textbox', { name: 'Title of P2 · 파일럿', exact: true })
+  const field = navigation.getByRole('textbox', { name: 'Title of P1 · 스틸', exact: true })
   await expect(field).toBeFocused()
-  await expect(field).toHaveValue('P2 · 파일럿')
-  await page.keyboard.type('P2 · 파일럿   (2차) ')
+  await expect(field).toHaveValue('P1 · 스틸')
+  await page.keyboard.type('P1 · 스틸   (2차) ')
   await page.keyboard.press('Enter')
-  await expect(pageLink(navigation, pilot)).toHaveText('P2 · 파일럿 (2차)')
-  await expect(pageLink(navigation, pilot)).toBeFocused()
-  await expect.poll(() => posts.at(-1)).toEqual({ slug: 'moa-design', doc: pilot, title: 'P2 · 파일럿 (2차)' })
+  await expect(pageLink(navigation, third)).toHaveText('P1 · 스틸 (2차)')
+  await expect(pageLink(navigation, third)).toBeFocused()
+  await expect.poll(() => posts.at(-1)).toEqual({ slug: 'moa-design', doc: third, title: 'P1 · 스틸 (2차)' })
 
   // Escape keeps the title as it was.
   await page.keyboard.press('F2')
   await page.keyboard.type('버릴 제목')
   await page.keyboard.press('Escape')
-  await expect(pageLink(navigation, pilot)).toHaveText('P2 · 파일럿 (2차)')
-  await expect(pageLink(navigation, pilot)).toBeFocused()
+  await expect(pageLink(navigation, third)).toHaveText('P1 · 스틸 (2차)')
+  await expect(pageLink(navigation, third)).toBeFocused()
   await page.waitForTimeout(300)
-  expect(posts).toHaveLength(3)
+  expect(posts).toHaveLength(4)
+  expect(tops).toHaveLength(1)
 })
 
 test('the page menu, from a right click or Shift+F10, renames a page or pins it; a failed save puts the old title back', async ({ page }) => {
@@ -564,7 +712,7 @@ test('the page menu, from a right click or Shift+F10, renames a page or pins it;
   await expect(menu).toHaveCount(0)
   await still.click({ button: 'right' })
   await expect(menu).toBeVisible()
-  await expect(menu.getByRole('menuitem')).toHaveText(['Open in new tab', 'Open in new window', 'Copy link', 'RenameF2', 'Pin to the top', 'Archive'])
+  await expect(menu.getByRole('menuitem')).toHaveText(['Open in new tab', 'Open in new window', 'Copy link', 'RenameF2', 'Move to new group', 'Remove from group', 'Pin to the top', 'Archive'])
   await expect(menu.getByRole('menuitem', { name: 'Open in new tab', exact: true })).toBeFocused()
   const [panel, target] = await Promise.all([rect(menu), rect(still)])
   expect(near(panel.left, target.left + target.width / 2) && near(panel.top, target.top + target.height / 2)).toBe(true)
@@ -684,12 +832,28 @@ test('the page menu, from a right click or Shift+F10, renames a page or pins it;
   await expect(episode.getByRole('link', { name: '저장 안 될 제목', exact: true })).toHaveCount(0)
 })
 
+// The top of the list as it is saved for the project — group names, and { doc } for a page outside any group — as
+// the group order API would keep it.
+const mockOrder = async (page, saved, posts, respond = () => ({ json: { ok: true } })) => {
+  await page.route('**/api/order/groups', async route => {
+    const body = route.request().postDataJSON()
+    posts.push(body)
+    const reply = await respond(body)
+    if (!reply.status) saved.groups = body.groups
+    return route.fulfill(reply)
+  })
+}
+
 test('a page outside any group goes into a new group named from its menu', async ({ page }) => {
   const [script, still, pilot] = [1, 2, 3].map(p => pageSlug('106', p))
   const saved = { docs: Object.fromEntries([script, still, pilot].map(slug => [slug, { group: '' }])), archived: { groups: [groupName('100')] } }
   const posts = []
   const pins = []
+  const orders = []
+  const tops = []
   await mockPageSaves(page, saved, posts)
+  await mockPageOrder(page, saved, orders)
+  await mockOrder(page, saved, tops)
   await mockPins(page, saved, pins)
   const navigation = await openLongProject(page, { episodes: ['105', '106', '100'], saved })
   const title = '더 명확하게, 더 편안하게'
@@ -698,17 +862,18 @@ test('a page outside any group goes into a new group named from its menu', async
   const menu = page.getByRole('menu', { name: title, exact: true })
   const field = name => navigation.getByRole('textbox', { name: `New group for ${name}`, exact: true })
   const groupToggle = name => navigation.locator(`[data-group="${name}"] > button`)
-  const addToNewGroup = async (link, name) => {
+  const moveToNewGroup = async (link, name) => {
     await link.click({ button: 'right' })
-    await page.getByRole('menu', { name, exact: true }).getByRole('menuitem', { name: 'Add to new group', exact: true }).click()
+    await page.getByRole('menu', { name, exact: true }).getByRole('menuitem', { name: 'Move to new group', exact: true }).click()
     await expect(field(name)).toBeFocused()
   }
+  expect(await topOrder(navigation)).toEqual(['105', '106', 'overview', script, still, pilot])
 
-  // Its menu has Add to new group after Rename. The group's name is typed in a field above the page, which stays in
+  // Its menu has Move to new group after Rename. The group's name is typed in a field above the page, which stays in
   // view; Escape leaves the page where it was, with focus back on it.
   await looseLink('overview').click({ button: 'right' })
-  await expect(menu.getByRole('menuitem')).toHaveText(['Open in new tab', 'Open in new window', 'Copy link', 'RenameF2', 'Add to new group', 'Pin to the top', 'Archive'])
-  await menu.getByRole('menuitem', { name: 'Add to new group', exact: true }).click()
+  await expect(menu.getByRole('menuitem')).toHaveText(['Open in new tab', 'Open in new window', 'Copy link', 'RenameF2', 'Move to new group', 'Pin to the top', 'Archive'])
+  await menu.getByRole('menuitem', { name: 'Move to new group', exact: true }).click()
   await expect(menu).toHaveCount(0)
   await expect(field(title)).toBeFocused()
   await expect(field(title)).toHaveValue('')
@@ -725,7 +890,7 @@ test('a page outside any group goes into a new group named from its menu', async
   // From the keyboard as well: Shift+F10, the arrow keys and Enter. No name leaves the page out of any group too.
   await page.keyboard.press('Shift+F10')
   for (let step = 0; step < 4; step++) await page.keyboard.press('ArrowDown')
-  await expect(menu.getByRole('menuitem', { name: 'Add to new group', exact: true })).toBeFocused()
+  await expect(menu.getByRole('menuitem', { name: 'Move to new group', exact: true })).toBeFocused()
   await page.keyboard.press('Enter')
   await expect(field(title)).toBeFocused()
   await page.keyboard.type('   ')
@@ -735,11 +900,13 @@ test('a page outside any group goes into a new group named from its menu', async
   await page.waitForTimeout(300)
   expect(posts).toEqual([])
 
-  // Enter moves the page into a new group of that name, on one line, and focus goes along to it there.
+  // Enter moves the page into a new group of that name, on one line, and focus goes along to it there. The new
+  // group stands right above the pages outside any group that follow the sort menu. By the order meta of its page it
+  // would stand above every group, so the groups above it are saved in their places; it follows them by itself.
   await page.keyboard.press('Shift+F10')
   await page.keyboard.press('End')
   for (let step = 0; step < 2; step++) await page.keyboard.press('ArrowUp')
-  await expect(menu.getByRole('menuitem', { name: 'Add to new group', exact: true })).toBeFocused()
+  await expect(menu.getByRole('menuitem', { name: 'Move to new group', exact: true })).toBeFocused()
   await page.keyboard.press('Enter')
   await page.keyboard.type('  검수   메모 ')
   await page.keyboard.press('Enter')
@@ -747,24 +914,30 @@ test('a page outside any group goes into a new group named from its menu', async
   await expect(pageLink(navigation, 'overview')).toBeFocused()
   await expect(groupToggle('검수 메모')).toHaveText('검수 메모1')
   await expect(looseLink('overview')).toHaveCount(0)
-  expect(posts).toEqual([{ slug: 'moa-design', doc: 'overview', group: '검수 메모' }])
+  expect(await topOrder(navigation)).toEqual(['105', '106', '검수 메모', script, still, pilot])
+  await expect.poll(() => posts).toEqual([{ slug: 'moa-design', doc: 'overview', group: '검수 메모' }])
+  await expect.poll(() => tops).toEqual([{ slug: 'moa-design', groups: [groupName('105'), groupName('106')] }])
+  expect(orders).toEqual([])
   await page.reload()
   await expect.poll(() => groupsOf(navigation, 'overview')).toEqual(['검수 메모'])
-  // In a group, the page's menu has no Add to new group.
+  expect(await topOrder(navigation)).toEqual(['105', '106', '검수 메모', script, still, pilot])
+  // In a group, the page's menu also takes it out of the group.
   await pageLink(navigation, 'overview').click({ button: 'right' })
-  await expect(menu.getByRole('menuitem')).toHaveText(['Open in new tab', 'Open in new window', 'Copy link', 'RenameF2', 'Pin to the top', 'Archive'])
+  await expect(menu.getByRole('menuitem')).toHaveText(['Open in new tab', 'Open in new window', 'Copy link', 'RenameF2', 'Move to new group', 'Remove from group', 'Pin to the top', 'Archive'])
   await page.keyboard.press('Escape')
 
-  // Leaving the field saves it too, and a name some group already has puts the page in that group.
-  await addToNewGroup(looseLink(script), 'P0 · 대본')
+  // Leaving the field saves it too, and a name some group already has puts the page in that group, as its last page.
+  await moveToNewGroup(looseLink(script), 'P0 · 대본')
   await field('P0 · 대본').fill('검수 메모')
   await page.mouse.click(900, 600)
-  await expect.poll(() => groupsOf(navigation, script)).toEqual(['검수 메모'])
+  await expect.poll(() => pagesIn(navigation, '검수 메모')).toEqual(['overview', script])
   await expect(groupToggle('검수 메모')).toHaveText('검수 메모2')
-  expect(posts.at(-1)).toEqual({ slug: 'moa-design', doc: script, group: '검수 메모' })
+  await expect.poll(() => posts.at(-1)).toEqual({ slug: 'moa-design', doc: script, group: '검수 메모' })
+  await expect.poll(() => orders).toEqual([{ slug: 'moa-design', group: '검수 메모', docs: ['overview', script] }])
+  expect(tops).toHaveLength(1)
 
   // An archived group's name is refused — the page would be archived with that group — and the list says why.
-  await addToNewGroup(looseLink(still), 'P1 · 스틸')
+  await moveToNewGroup(looseLink(still), 'P1 · 스틸')
   await page.keyboard.type(groupName('100'))
   await page.keyboard.press('Enter')
   await expect(page.getByRole('alert').filter({ hasText: 'is an archived group' })).toHaveText(`“${groupName('100')}” is an archived group. Unarchive it first, or choose another name.`)
@@ -777,37 +950,160 @@ test('a page outside any group goes into a new group named from its menu', async
   await looseLink(still).locator('..').getByRole('button', { name: 'Pin P1 · 스틸', exact: true }).click()
   await expect.poll(() => pinnedTitles(navigation)).toEqual(['P1 · 스틸'])
   const pinnedLink = pinnedGroup(navigation).locator('a').first()
-  await addToNewGroup(pinnedLink, 'P1 · 스틸')
+  await moveToNewGroup(pinnedLink, 'P1 · 스틸')
   await expect(pinnedGroup(navigation).getByRole('textbox')).toBeFocused()
   await page.keyboard.type('스틸 모음')
   await page.keyboard.press('Enter')
   await expect.poll(() => groupsOf(navigation, still)).toEqual(['스틸 모음'])
   await expect(pinnedLink).toHaveText('P1 · 스틸 스틸 모음')
   await expect(pinnedLink).toBeFocused()
-  expect(posts.at(-1)).toEqual({ slug: 'moa-design', doc: still, group: '스틸 모음' })
+  await expect.poll(() => posts.at(-1)).toEqual({ slug: 'moa-design', doc: still, group: '스틸 모음' })
+  // This group stands there by the order meta of its page: nothing more is saved for the top of the list.
+  expect(await topOrder(navigation)).toEqual(['105', '106', '검수 메모', '스틸 모음', pilot])
+  await page.reload()
+  await expect.poll(() => topOrder(navigation)).toEqual(['105', '106', '검수 메모', '스틸 모음', pilot])
+  expect(tops).toHaveLength(1)
 
   // A failed save leaves the page out of any group, without the new group, and says why.
   await page.unroute('**/api/doc/update')
   await mockPageSaves(page, saved, posts, () => ({ status: 500, json: { error: '검수용 저장 실패' } }))
-  await addToNewGroup(looseLink(pilot), 'P2 · 파일럿')
+  await moveToNewGroup(looseLink(pilot), 'P2 · 파일럿')
   await page.keyboard.type('저장 안 될 그룹')
   await page.keyboard.press('Enter')
   await expect(page.getByRole('alert').filter({ hasText: '검수용 저장 실패' })).toBeVisible()
   await expect(looseLink(pilot)).toBeVisible()
   await expect(navigation.locator('[data-group="저장 안 될 그룹"]')).toHaveCount(0)
+  expect(tops).toHaveLength(1)
+})
+
+test('a page in a group moves into a new group right below its own, or out of its group, from its menu or by dragging', async ({ page }) => {
+  const saved = {}
+  const posts = []
+  const orders = []
+  const tops = []
+  const pins = []
+  await mockPageSaves(page, saved, posts)
+  await mockPageOrder(page, saved, orders)
+  await mockOrder(page, saved, tops)
+  await mockPins(page, saved, pins)
+  const titles = few.slice(0, 3)
+  const navigation = await openLongProject(page, { episodes: ['105', '106', '100'], expanded: ['106'], titles, saved })
+  const [first, second, third] = slugsOf('106', 3)
+  const [g105, g106, g100] = ['105', '106', '100'].map(groupName)
+  const field = name => navigation.getByRole('textbox', { name: `New group for ${name}`, exact: true })
+  const groupToggle = name => navigation.locator(`[data-group="${name}"] > button`)
+  const looseLink = slug => navigation.locator(`:scope > [data-loose="${slug}"] > a`)
+  const choose = async (link, name, item) => {
+    await link.click({ button: 'right' })
+    await page.getByRole('menu', { name, exact: true }).getByRole('menuitem', { name: item, exact: true }).click()
+  }
+  expect(await topOrder(navigation)).toEqual(['105', '106', '100', 'overview'])
+
+  // Move to new group: the name is typed above the page, where it stands in its group. Escape, or the name of the
+  // group it is in, leaves it there, with focus back on it.
+  await choose(pageLink(navigation, second), titles[1], 'Move to new group')
+  await expect(field(titles[1])).toBeFocused()
+  expect(await pagesIn(navigation, g106)).toEqual([first, second, third])
+  const [fieldBox, pageBox] = await Promise.all([rect(field(titles[1])), rect(pageLink(navigation, second))])
+  expect(fieldBox.bottom).toBeLessThanOrEqual(pageBox.top)
+  await page.keyboard.press('Escape')
+  await expect(pageLink(navigation, second)).toBeFocused()
+  await page.keyboard.press('Shift+F10')
+  for (let step = 0; step < 4; step++) await page.keyboard.press('ArrowDown')
+  await page.keyboard.press('Enter')
+  await page.keyboard.type(g106)
+  await page.keyboard.press('Enter')
+  await expect(field(titles[1])).toHaveCount(0)
+  await expect(pageLink(navigation, second)).toBeFocused()
+  await page.waitForTimeout(300)
+  expect(posts).toEqual([])
+
+  // Enter moves the page into the new group, which stands right below the group it left, and focus goes along. By
+  // the order meta of its page the new group stands there by itself, so nothing is saved for the top of the list.
+  await page.keyboard.press('Shift+F10')
+  for (let step = 0; step < 4; step++) await page.keyboard.press('ArrowDown')
+  await page.keyboard.press('Enter')
+  await page.keyboard.type('스틸 모음')
+  await page.keyboard.press('Enter')
+  await expect.poll(() => topOrder(navigation)).toEqual(['105', '106', '스틸 모음', '100', 'overview'])
+  await expect.poll(() => groupsOf(navigation, second)).toEqual(['스틸 모음'])
+  await expect(pageLink(navigation, second)).toBeFocused()
+  await expect(groupToggle(g106)).toHaveText(`${g106}2`)
+  await expect.poll(() => posts).toEqual([{ slug: 'moa-design', doc: second, group: '스틸 모음' }])
+  await page.reload()
+  await expect.poll(() => topOrder(navigation)).toEqual(['105', '106', '스틸 모음', '100', 'overview'])
+
+  // Another page dragged onto the new group's heading joins it, as its last page.
+  await pageLink(navigation, third).dragTo(groupToggle('스틸 모음'))
+  await expect.poll(() => pagesIn(navigation, '스틸 모음')).toEqual([second, third])
+  await expect.poll(() => orders).toEqual([{ slug: 'moa-design', group: '스틸 모음', docs: [second, third] }])
+
+  // The only page left in a group, moved into a new group, gives that group's place to the new one.
+  await choose(pageLink(navigation, first), titles[0], 'Move to new group')
+  await page.keyboard.type('대본')
+  await page.keyboard.press('Enter')
+  await expect.poll(() => topOrder(navigation)).toEqual(['105', '대본', '스틸 모음', '100', 'overview'])
+  await expect.poll(() => posts.at(-1)).toEqual({ slug: 'moa-design', doc: first, group: '대본' })
+  expect(tops).toEqual([])
+
+  // Remove from group takes the page out of its group, to the place right below that group at the top of the list;
+  // the top of the list is saved as far down as it takes for the page to stand there, and focus goes along.
+  await choose(pageLink(navigation, second), titles[1], 'Remove from group')
+  await expect.poll(() => topOrder(navigation)).toEqual(['105', '대본', '스틸 모음', second, '100', 'overview'])
+  await expect(looseLink(second)).toBeFocused()
+  await expect(groupToggle('스틸 모음')).toHaveText('스틸 모음1')
+  await expect.poll(() => posts.at(-1)).toEqual({ slug: 'moa-design', doc: second, group: '' })
+  await expect.poll(() => tops.at(-1)).toEqual({ slug: 'moa-design', groups: [g105, '대본', '스틸 모음', { doc: second }, g100] })
+  // Out of any group, the page's menu no longer offers it.
+  await looseLink(second).click({ button: 'right' })
+  await expect(page.getByRole('menu', { name: titles[1], exact: true }).getByRole('menuitem')).toHaveText(['Open in new tab', 'Open in new window', 'Copy link', 'RenameF2', 'Move to new group', 'Pin to the top', 'Archive'])
+  await page.keyboard.press('Escape')
+
+  // Dragged onto the top edge of a group's heading, a page leaves its group for the place above that group; the
+  // line shows there while it is held. Its group, left without a page, goes with it.
+  const from = await pageLink(navigation, third).boundingBox()
+  const to = await groupToggle(g105).boundingBox()
+  await page.mouse.move(from.x + 40, from.y + from.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(to.x + 40, to.y + 3, { steps: 5 })
+  await expect(navigation.locator(`[data-group="${g105}"]`)).toHaveClass(/dropBefore/)
+  await page.mouse.up()
+  await expect.poll(() => topOrder(navigation)).toEqual([third, '105', '대본', second, '100', 'overview'])
+  await expect.poll(() => posts.at(-1)).toEqual({ slug: 'moa-design', doc: third, group: '' })
+  await expect.poll(() => tops.at(-1)).toEqual({ slug: 'moa-design', groups: [{ doc: third }, g105, '대본', { doc: second }, g100] })
+
+  // Dropped on the lower half of a page outside any group, it goes below that page.
+  const { height } = await looseLink(second).boundingBox()
+  await pageLink(navigation, first).dragTo(looseLink(second), { targetPosition: { x: 40, y: height - 4 } })
+  await expect.poll(() => topOrder(navigation)).toEqual([third, '105', second, first, '100', 'overview'])
+  await expect.poll(() => tops.at(-1)).toEqual({ slug: 'moa-design', groups: [{ doc: third }, g105, { doc: second }, { doc: first }, g100] })
+  await page.reload()
+  await expect.poll(() => topOrder(navigation)).toEqual([third, '105', second, first, '100', 'overview'])
+
+  // From the page's row in the Pinned group, Remove from group leaves that row where it is, with focus.
+  const inGroup = pageSlug('105', 1)
+  saved.pins = [inGroup]
+  await page.reload()
+  const pinnedLink = pinnedGroup(navigation).locator('a').first()
+  await expect(pinnedLink).toHaveText(`${titles[1]} ${g105}`)
+  await choose(pinnedLink, titles[1], 'Remove from group')
+  await expect(pinnedLink).toHaveText(titles[1])
+  await expect(pinnedLink).toBeFocused()
+  await expect.poll(() => topOrder(navigation)).toEqual([third, '105', inGroup, second, first, '100', 'overview'])
+
+  // A failed save puts the page back in its group and says why; the place is not saved.
+  const saves = tops.length
+  await page.unroute('**/api/doc/update')
+  await mockPageSaves(page, saved, posts, () => ({ status: 500, json: { error: '검수용 저장 실패' } }))
+  await groupToggle(g105).click()
+  await choose(pageLink(navigation, pageSlug('105', 0)), titles[0], 'Remove from group')
+  await expect(page.getByRole('alert').filter({ hasText: '검수용 저장 실패' })).toBeVisible()
+  await expect.poll(() => groupsOf(navigation, pageSlug('105', 0))).toEqual([g105])
+  expect(tops).toHaveLength(saves)
 })
 
 // The top of the list holds the groups and the pages outside any group — by default the groups first — and an admin
-// drags them into another arrangement, saved for the project (mocked here) as group names and { doc } items.
-const mockOrder = async (page, saved, posts, respond = () => ({ json: { ok: true } })) => {
-  await page.route('**/api/order/groups', async route => {
-    const body = route.request().postDataJSON()
-    posts.push(body)
-    const reply = await respond(body)
-    if (!reply.status) saved.groups = body.groups
-    return route.fulfill(reply)
-  })
-}
+// drags them into another arrangement, saved for the project (mockOrder above) as group names and { doc } items.
 const looseRow = (navigation, slug) => navigation.locator(`:scope > [data-loose="${slug}"]`)
 const headingOf = (navigation, number) => navigation.locator(`[data-group="${groupName(number)}"] > button`)
 // A move is saved before the next one can start: a group's heading can be dragged again.
@@ -844,8 +1140,10 @@ test('a group and a page outside any group are dragged between each other, and t
   const saved = { docs: { [script]: { group: '' }, [still]: { group: '' } } }
   const posts = []
   const moves = []
+  const orders = []
   await mockOrder(page, saved, posts)
   await mockPageSaves(page, saved, moves)
+  await mockPageOrder(page, saved, orders)
   const navigation = await openLongProject(page, { episodes: ['105', '106', '100'], saved })
   const link = slug => looseRow(navigation, slug).getByRole('link')
   expect(await topOrder(navigation)).toEqual(['105', '106', '100', 'overview', script, still])
@@ -871,10 +1169,11 @@ test('a group and a page outside any group are dragged between each other, and t
   expect(posts.at(-1).groups).toEqual([{ doc: still }, groupName('105'), groupName('106'), { doc: 'overview' }, groupName('100')])
   await settled(navigation, '105')
 
-  // Dropped on the middle of a group's heading, it joins the group instead.
+  // Dropped on the middle of a group's heading, it joins the group instead, as its last page.
   await link(script).dragTo(headingOf(navigation, '106'))
   await expect.poll(() => groupsOf(navigation, script)).toEqual([groupName('106')])
   expect(moves).toEqual([{ slug: 'moa-design', doc: script, group: groupName('106') }])
+  await expect.poll(() => orders).toEqual([{ slug: 'moa-design', group: groupName('106'), docs: [...slugsOf('106').filter(slug => slug !== script && slug !== still), script] }])
   expect(posts).toHaveLength(2)
   await headingOf(navigation, '106').click()
   await expect(headingOf(navigation, '106')).toHaveAttribute('aria-expanded', 'false')
@@ -921,8 +1220,10 @@ test('from the keyboard a group moves past a page outside any group, and such a 
   const saved = {}
   const posts = []
   const moves = []
+  const orders = []
   await mockOrder(page, saved, posts)
   await mockPageSaves(page, saved, moves)
+  await mockPageOrder(page, saved, orders)
   const navigation = await openLongProject(page, { episodes: ['105', '106'], saved })
   expect(await topOrder(navigation)).toEqual(['105', '106', 'overview'])
 
@@ -937,12 +1238,19 @@ test('from the keyboard a group moves past a page outside any group, and such a 
   await page.waitForTimeout(300)
   expect(posts).toHaveLength(1)
 
-  // Alt+Up on the page takes it into the nearest group above it, and focus goes along.
+  // Alt+Up on the page takes it into the nearest group above it, as its last page, and focus goes along; Alt+Down
+  // from there, into the group below, as its first.
   await looseRow(navigation, 'overview').getByRole('link').focus()
   await page.keyboard.press('Alt+ArrowUp')
-  await expect.poll(() => groupsOf(navigation, 'overview')).toEqual([groupName('105')])
+  await expect.poll(() => pagesIn(navigation, groupName('105'))).toEqual([...slugsOf('105'), 'overview'])
   await expect(pageLink(navigation, 'overview')).toBeFocused()
   expect(moves).toEqual([{ slug: 'moa-design', doc: 'overview', group: groupName('105') }])
+  await expect.poll(() => orders).toEqual([{ slug: 'moa-design', group: groupName('105'), docs: [...slugsOf('105'), 'overview'] }])
+  await page.keyboard.press('Alt+ArrowDown')
+  await expect.poll(() => pagesIn(navigation, groupName('106'))).toEqual(['overview', ...slugsOf('106')])
+  await expect(pageLink(navigation, 'overview')).toBeFocused()
+  await expect.poll(() => moves.at(-1)).toEqual({ slug: 'moa-design', doc: 'overview', group: groupName('106') })
+  await expect.poll(() => orders.at(-1)).toEqual({ slug: 'moa-design', group: groupName('106'), docs: ['overview', ...slugsOf('106')] })
 })
 
 test('a page or a whole group is archived from its menu into an Archived group at the end of the list, and brought back from there', async ({ page }) => {
@@ -1147,6 +1455,107 @@ test('the group order API keeps only the current groups of the project', async (
     expect((await page.request.post('/api/order/groups', { data: { slug: 'moa-design' } })).status()).toBe(400)
   } finally {
     fs.writeFileSync(registryFile, registryBefore)
+  }
+})
+
+test('the page order API keeps the order of the pages a group holds', async ({ page, browser, baseURL }) => {
+  await login(page)
+  const registryFile = path.join(reviewRoot, 'registry.json')
+  const registryBefore = fs.readFileSync(registryFile)
+  const orderOf = async (slug = 'moa-design', request = page.request) => (await (await request.get('/api/projects')).json()).projects.find(entry => entry.slug === slug).pageOrder
+  const order = (data, request = page.request) => request.post('/api/order/pages', { data })
+  const member = await browser.newContext({ baseURL })
+  const guest = await browser.newContext({ baseURL })
+  try {
+    // Only the pages the group holds now are kept, once each, in the order given.
+    const response = await order({ slug: 'moa-design', group: '작업 기록', docs: ['note-4', 'overview', 'note-2', 'no-such-page', 'note-4', 7] })
+    expect(await response.json()).toEqual({ ok: true, count: 2 })
+    expect(await orderOf()).toEqual({ '작업 기록': ['note-4', 'note-2'] })
+    expect((await order({ slug: 'moa-design', group: '프로젝트 개요', docs: ['overview'] })).ok()).toBeTruthy()
+    expect(JSON.parse(fs.readFileSync(registryFile, 'utf8')).pageOrder).toEqual({ 'moa-design': { '작업 기록': ['note-4', 'note-2'], '프로젝트 개요': ['overview'] } })
+
+    // An invited reader sees the order and cannot change it; a share guest gets none.
+    const memberPage = await member.newPage()
+    await login(memberPage, 'member@moa.example')
+    expect(await orderOf('moa-design', memberPage.request)).toEqual({ '작업 기록': ['note-4', 'note-2'], '프로젝트 개요': ['overview'] })
+    expect([401, 403]).toContain((await order({ slug: 'moa-design', group: '작업 기록', docs: ['note-2'] }, memberPage.request)).status())
+    const guestPage = await guest.newPage()
+    await guestPage.goto('/s/review-document-link-only')
+    await expect(guestPage.getByRole('heading', { name: '더 명확하게, 더 편안하게' })).toBeVisible()
+    expect(await orderOf('moa-design', guestPage.request)).toBeUndefined()
+    expect((await order({ slug: 'moa-design', group: '작업 기록', docs: ['note-2'] }, guestPage.request)).status()).toBe(401)
+
+    expect((await order({ slug: 'no-such-project', group: '작업 기록', docs: ['note-2'] })).status()).toBe(404)
+    expect((await order({ slug: 'moa-design', group: '없는 그룹', docs: ['note-2'] })).status()).toBe(404)
+    expect((await order({ slug: 'moa-design', group: '', docs: ['note-2'] })).status()).toBe(400)
+    expect((await order({ slug: 'moa-design', group: '작업 기록' })).status()).toBe(400)
+    expect((await order({ slug: 'moa-design', docs: ['note-2'] })).status()).toBe(400)
+    expect(await orderOf()).toEqual({ '작업 기록': ['note-4', 'note-2'], '프로젝트 개요': ['overview'] })
+
+    // An empty list goes back to the order meta — also for a group that is gone — and the last one empties the entry.
+    expect((await order({ slug: 'moa-design', group: '작업 기록', docs: [] })).ok()).toBeTruthy()
+    expect(await orderOf()).toEqual({ '프로젝트 개요': ['overview'] })
+    expect((await order({ slug: 'moa-design', group: '없는 그룹', docs: [] })).ok()).toBeTruthy()
+    expect((await order({ slug: 'moa-design', group: '프로젝트 개요', docs: ['no-such-page'] })).ok()).toBeTruthy()
+    expect(await orderOf()).toBeUndefined()
+    expect(JSON.parse(fs.readFileSync(registryFile, 'utf8'))).not.toHaveProperty('pageOrder')
+  } finally {
+    fs.writeFileSync(registryFile, registryBefore)
+    await member.close()
+    await guest.close()
+  }
+})
+
+// Nothing mocked: what an admin arranges in the sidebar is kept by the registry and the page's file, and read back.
+test('an arrangement made in the sidebar is saved in the registry and the page file, and comes back on reload', async ({ page }) => {
+  await login(page)
+  await page.route('**/api/claude', route => route.fulfill({ json: {} }))
+  const registryFile = path.join(reviewRoot, 'registry.json')
+  const registryBefore = fs.readFileSync(registryFile)
+  const [file, other] = ['note-3.mdx', 'note-2.mdx'].map(name => path.join(reviewRoot, 'projects', 'moa-design', name))
+  const [before, otherBefore] = [file, other].map(name => fs.readFileSync(name, 'utf8'))
+  const registry = () => JSON.parse(fs.readFileSync(registryFile, 'utf8'))
+  try {
+    await page.setViewportSize({ width: 1440, height: 1200 })
+    await page.goto('/p/moa-design/overview')
+    const navigation = page.getByRole('navigation', { name: 'Project documents', exact: true })
+    const top = () => navigation.evaluate(nav => [...nav.children].filter(element => 'group' in element.dataset || 'loose' in element.dataset).map(element => element.dataset.group ?? element.dataset.loose))
+    await expect.poll(() => pagesIn(navigation, '작업 기록')).toEqual(['note-2', 'note-3', 'note-4'])
+    expect(await top()).toEqual(['프로젝트 개요', '작업 기록', '검수'])
+
+    // A page dragged above another page of its group: the group's order goes into the registry.
+    await pageLink(navigation, 'note-4').dragTo(rowOf(navigation, 'note-2'), { targetPosition: { x: 40, y: 4 } })
+    await expect.poll(() => pagesIn(navigation, '작업 기록')).toEqual(['note-4', 'note-2', 'note-3'])
+    await expect.poll(() => registry().pageOrder).toEqual({ 'moa-design': { '작업 기록': ['note-4', 'note-2', 'note-3'] } })
+    await page.reload()
+    await expect.poll(() => pagesIn(navigation, '작업 기록')).toEqual(['note-4', 'note-2', 'note-3'])
+
+    // A page moved into a new group from its menu: its file gets the group. The new group stands right below the
+    // group the page left by the order meta of that page, so the registry holds nothing for it.
+    await pageLink(navigation, 'note-3').click({ button: 'right' })
+    await page.getByRole('menuitem', { name: 'Move to new group', exact: true }).click()
+    await page.keyboard.type('회의 메모')
+    await page.keyboard.press('Enter')
+    await expect.poll(() => top()).toEqual(['프로젝트 개요', '작업 기록', '회의 메모', '검수'])
+    await expect.poll(() => fs.readFileSync(file, 'utf8')).toBe(before.replace("export const group = '작업 기록'", "export const group = '회의 메모'"))
+    await page.reload()
+    await expect.poll(() => top()).toEqual(['프로젝트 개요', '작업 기록', '회의 메모', '검수'])
+    expect(registry()).not.toHaveProperty('groupOrder')
+    expect(await pagesIn(navigation, '작업 기록')).toEqual(['note-4', 'note-2'])
+    expect(await pagesIn(navigation, '회의 메모')).toEqual(['note-3'])
+
+    // Taken out of its group from its menu, the page stands right below that group: saved as a { doc } item, with
+    // the top of the list down to the group that follows it.
+    await pageLink(navigation, 'note-2').click({ button: 'right' })
+    await page.getByRole('menuitem', { name: 'Remove from group', exact: true }).click()
+    await expect.poll(() => top()).toEqual(['프로젝트 개요', '작업 기록', 'note-2', '회의 메모', '검수'])
+    await expect.poll(() => registry().groupOrder).toEqual({ 'moa-design': ['프로젝트 개요', '작업 기록', { doc: 'note-2' }, '회의 메모'] })
+    await page.reload()
+    await expect.poll(() => top()).toEqual(['프로젝트 개요', '작업 기록', 'note-2', '회의 메모', '검수'])
+  } finally {
+    fs.writeFileSync(registryFile, registryBefore)
+    fs.writeFileSync(file, before)
+    fs.writeFileSync(other, otherBefore)
   }
 })
 

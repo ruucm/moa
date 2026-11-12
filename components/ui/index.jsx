@@ -2,7 +2,7 @@
 
 import React, { forwardRef, useId, useRef } from 'react'
 import * as DialogPrimitive from '@radix-ui/react-dialog'
-import { ALargeSmall, AppWindow, Archive, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ArrowUpRight, BookOpen, Check, ChevronDown, ChevronRight, ChevronUp, CircleAlert, CircleCheck, Clock, Copy, Ellipsis, ExternalLink, Eye, FileText, Folder, FolderPlus, GripVertical, History, House, ImageIcon, Info, Keyboard, Layers, LayoutGrid, LinkIcon, List, Lock, LogOut, Maximize, Menu, Minimize, MoveHorizontal, NotebookText, PanelLeft, PanelLeftClose, PanelRight, Pause, Pencil, Pin, Play, Plus, RefreshCw, RotateCcw, Search, Send, Settings, ShieldCheck, SlidersHorizontal, Sparkles, Square, SquareTerminal, Timer, Trash2, Users, X } from 'lucide-react'
+import { ALargeSmall, AppWindow, Archive, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ArrowUpRight, BookOpen, Check, ChevronDown, ChevronRight, ChevronUp, CircleAlert, CircleCheck, Clock, Copy, Ellipsis, ExternalLink, Eye, FileText, Folder, FolderOutput, FolderPlus, GripVertical, History, House, ImageIcon, Info, Keyboard, Layers, LayoutGrid, LinkIcon, List, Lock, LogOut, Maximize, Menu, Minimize, MoveHorizontal, NotebookText, PanelLeft, PanelLeftClose, PanelRight, Pause, Pencil, Pin, Play, Plus, RefreshCw, RotateCcw, Search, Send, Settings, ShieldCheck, SlidersHorizontal, Sparkles, Square, SquareTerminal, Timer, Trash2, Users, X } from 'lucide-react'
 import styles from './ui.module.css'
 
 const cx = (...items) => items.filter(Boolean).join(' ')
@@ -12,7 +12,7 @@ const icons = {
   search: Search, plus: Plus, x: X, menu: Menu,
   chevronDown: ChevronDown, chevronUp: ChevronUp, chevronRight: ChevronRight,
   arrowRight: ArrowRight, arrowUpRight: ArrowUpRight, arrowLeft: ArrowLeft, arrowUp: ArrowUp, arrowDown: ArrowDown,
-  folder: Folder, folderPlus: FolderPlus, file: FileText, book: BookOpen, home: House, more: Ellipsis,
+  folder: Folder, folderPlus: FolderPlus, folderOutput: FolderOutput, file: FileText, book: BookOpen, home: House, more: Ellipsis,
   check: Check, checkCircle: CircleCheck, link: LinkIcon, users: Users, clock: Clock, history: History, refresh: RefreshCw,
   settings: Settings, logOut: LogOut, sparkles: Sparkles, terminal: SquareTerminal, send: Send, stop: Square, copy: Copy,
   alertCircle: CircleAlert, info: Info, lock: Lock, shield: ShieldCheck, layers: Layers, image: ImageIcon, play: Play,
