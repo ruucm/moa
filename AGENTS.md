@@ -272,6 +272,17 @@ stdout (NDJSON) — text, tool calls, results. No API key needed (uses the local
   items. Long sessions return the last 400 items and report the rest as `skipped`.
   Sidechains (subagents) and thinking blocks are excluded.
 
+## Sidebar (⌘B)
+
+**⌘B** on a Mac, **Ctrl+B** elsewhere, hides and shows a project's sidebar from anywhere on the page, a text
+field included, as the buttons at the top of the sidebar and in the header do; the choice is kept in the browser
+(`hub.reader.view`, with the view options). Only the platform's own modifier counts, so Ctrl+B on a Mac still moves
+the caret in a text field. Focus stays where it was unless it was in the part that goes away; then it moves to the
+control that brings the sidebar back (a rename in progress is saved, as a click elsewhere saves it). Under 768px,
+where the list lives in a drawer, the key opens and closes the drawer. While a dialog covers the page (the search,
+a zoomed picture, a presentation, the assistant's drawer) the key does nothing, and a rich text field keeps it for
+bold. A shared document has no sidebar and leaves the key to the browser. Code: `features/documents/use-sidebar-shortcut.js`.
+
 ## Search (⌘K)
 
 **⌘K** (Ctrl+K elsewhere), or the search icon at the top of a project's sidebar and in the hub's top bar,

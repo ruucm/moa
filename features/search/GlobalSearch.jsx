@@ -17,7 +17,7 @@ const PREVIEW_KEY = 'hub.search.preview'
 // Narrower than this, the list needs the whole palette; a preview beside it would leave neither readable.
 const PREVIEW_MEDIA = '(min-width: 768px)'
 
-const isApple = () => typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/.test(navigator.platform || navigator.userAgent || '')
+export const isApple = () => typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/.test(navigator.platform || navigator.userAgent || '')
 
 // The shortcut as the keyboard in front of the reader names it: ⌘K on a Mac, Ctrl+K elsewhere. Read after
 // mount, so the server and the first client render agree.

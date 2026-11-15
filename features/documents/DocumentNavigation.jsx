@@ -123,8 +123,9 @@ const sortHints = {
 }
 
 // `onSearch` opens the search over every project (the sidebar's own filter box is gone: the search finds a page
-// of this project as well as any other, see features/search/GlobalSearch.jsx).
-export default function DocumentNavigation({ project, projects, doc, authed, owner, collapsed, onToggle, sort = 'order', onSort, onReorder, onNavigate, onSearch, onCollapse, collapseButtonRef, mobile = false }) {
+// of this project as well as any other, see features/search/GlobalSearch.jsx). `collapseShortcut` names the key
+// that also hides the sidebar ({ label: '⌘B', keys: 'Meta+B' }, see use-sidebar-shortcut.js).
+export default function DocumentNavigation({ project, projects, doc, authed, owner, collapsed, onToggle, sort = 'order', onSort, onReorder, onNavigate, onSearch, onCollapse, collapseButtonRef, collapseShortcut, mobile = false }) {
   // What is dragged — { group: name } or { page: slug } — and where it would land: a page into a group, at its end
   // ({ into: name }), or among the pages of a group, before the one at `at` there or after the last ({ group: name,
   // at }); a group or a page beside an item at the top of the list ({ index, side: 'before' | 'after' }).
@@ -979,7 +980,8 @@ export default function DocumentNavigation({ project, projects, doc, authed, own
         {authed ? <a href="/" className={styles.brandLink} aria-label="MOA project home"><Brand /></a> : <Brand />}
         <div className={styles.brandActions}>
           {onSearch && <SearchButton onClick={onSearch} />}
-          {onCollapse && <IconButton ref={collapseButtonRef} icon="panelLeftClose" label="Hide sidebar" onClick={onCollapse} />}
+          {onCollapse && <IconButton ref={collapseButtonRef} icon="panelLeftClose" label="Hide sidebar" onClick={onCollapse}
+            {...(collapseShortcut && { title: `Hide sidebar (${collapseShortcut.label})`, 'aria-keyshortcuts': collapseShortcut.keys })} />}
         </div>
       </div>}
       <div className={styles.projectBlock}>

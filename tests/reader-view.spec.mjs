@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { login } from './review-session.mjs'
 
-// Reader view settings: the sidebar collapses from its own button, and the view menu switches small
+// Reader view settings: the sidebar collapses from its own button or ⌘B (Ctrl+B elsewhere), and the view menu switches small
 // text, full width and the table of contents. Everything is kept in one localStorage entry for every document.
 const heading = '더 명확하게, 더 편안하게'
 const openDocument = async (page, path = '/p/moa-design/overview') => {
@@ -23,6 +23,13 @@ const openMenu = async page => {
   return menu
 }
 const option = (page, name) => page.getByRole('switch', { name, exact: true })
+// A keydown sent by hand, for keys a test keyboard cannot type: a Korean input method's ㅠ on the B key, Dvorak's X
+// there. Returns whether the page took the key from the browser.
+const sendKey = (page, init) => page.evaluate((init) => {
+  const event = new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init })
+  ;(document.activeElement || document.body).dispatchEvent(event)
+  return event.defaultPrevented
+}, init)
 
 test('the sidebar collapses from its own button, hands focus to the control that restores it, and stays collapsed after a reload', async ({ page }) => {
   await login(page)
@@ -52,6 +59,141 @@ test('the sidebar collapses from its own button, hands focus to the control that
   await expect(showSidebar).toHaveCount(0)
   expect(await storedView(page)).toMatchObject({ sidebar: true })
   expect(await width(reading(page))).toBe(initial)
+})
+
+test('⌘B (Ctrl+B elsewhere) hides and shows the sidebar from anywhere, a text field included, and moves focus only out of what goes away', async ({ page }) => {
+  await login(page)
+  await mockTools(page)
+  await openDocument(page)
+  const hide = sidebar(page).getByRole('button', { name: 'Hide sidebar', exact: true })
+  const show = page.getByRole('button', { name: 'Show sidebar', exact: true })
+  // Chromium on Linux: Ctrl+B, and the toggles name it.
+  await expect(hide).toHaveAttribute('aria-keyshortcuts', 'Control+B')
+  await expect(hide).toHaveAttribute('title', 'Hide sidebar (Ctrl+B)')
+
+  // From the document: the sidebar goes and comes back, the setting is kept, focus stays where it was.
+  await reading(page).focus()
+  await page.keyboard.press('Control+b')
+  await expect(sidebar(page)).toHaveCount(0)
+  await expect(show).toHaveAttribute('title', 'Show sidebar (Ctrl+B)')
+  await expect(show).toHaveAttribute('aria-keyshortcuts', 'Control+B')
+  await expect(reading(page)).toBeFocused()
+  expect(await storedView(page)).toMatchObject({ sidebar: false })
+  await page.reload()
+  await expect(page.getByRole('heading', { name: heading, exact: true })).toBeVisible()
+  await expect(sidebar(page)).toHaveCount(0)
+  await page.keyboard.press('Control+b')
+  await expect(sidebar(page)).toBeVisible()
+  expect(await storedView(page)).toMatchObject({ sidebar: true })
+
+  // From inside the sidebar: the focused link leaves with it, so focus moves to the control that brings it back.
+  await sidebar(page).getByRole('navigation', { name: 'Project documents', exact: true }).getByRole('link').first().focus()
+  await page.keyboard.press('Control+b')
+  await expect(sidebar(page)).toHaveCount(0)
+  await expect(show).toBeFocused()
+  await page.keyboard.press('Control+b')
+  await expect(sidebar(page)).toBeVisible()
+  await expect(hide).toBeFocused()
+
+  // Held down, the key toggles once.
+  await page.keyboard.down('Control')
+  for (let i = 0; i < 4; i += 1) await page.keyboard.down('b')
+  await page.keyboard.up('b')
+  await page.keyboard.up('Control')
+  await expect(sidebar(page)).toHaveCount(0)
+  await expect(show).toBeFocused()
+  await page.keyboard.press('Control+b')
+  await expect(sidebar(page)).toBeVisible()
+
+  // In the assistant's message box: the sidebar toggles, the box keeps focus and what was typed.
+  await page.getByRole('button', { name: 'Open AI assistant', exact: true }).click()
+  const message = page.getByRole('textbox', { name: 'Message to AI', exact: true })
+  await message.fill('초안')
+  await message.focus()
+  await page.keyboard.press('Control+b')
+  await expect(sidebar(page)).toHaveCount(0)
+  await expect(message).toBeFocused()
+  await expect(message).toHaveValue('초안')
+  await page.keyboard.press('Control+b')
+  await expect(sidebar(page)).toBeVisible()
+  await expect(message).toBeFocused()
+  await page.getByRole('banner').getByRole('button', { name: 'Close AI assistant', exact: true }).click()
+
+  // The letter B wherever the layout puts it: the B key under a Korean input method, not the B key that types X.
+  await reading(page).focus()
+  expect(await sendKey(page, { key: 'ㅠ', code: 'KeyB', ctrlKey: true })).toBe(true)
+  await expect(sidebar(page)).toHaveCount(0)
+  expect(await sendKey(page, { key: 'x', code: 'KeyB', ctrlKey: true })).toBe(false)
+  expect(await sendKey(page, { key: 'b', code: 'KeyN', ctrlKey: true })).toBe(true)
+  await expect(sidebar(page)).toBeVisible()
+  // Other modifiers make another key.
+  for (const keys of ['Control+Shift+b', 'Control+Alt+b', 'Meta+b', 'b']) await page.keyboard.press(keys)
+  await expect(sidebar(page)).toBeVisible()
+  expect(await storedView(page)).toMatchObject({ sidebar: true })
+})
+
+test('the sidebar key does nothing under a dialog or in a rich text field', async ({ page }) => {
+  await login(page)
+  await mockTools(page)
+  await openDocument(page)
+
+  // The search covers the page: the key leaves the sidebar, and the search, as they are.
+  await page.keyboard.press('Control+k')
+  const search = page.getByRole('dialog', { name: 'Search documents', exact: true })
+  await expect(search).toBeVisible()
+  await page.keyboard.press('Control+b')
+  await expect(search).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(search).toHaveCount(0)
+  await expect(sidebar(page)).toBeVisible()
+
+  // A <dialog> opened with showModal() (a page's own viewer) covers it too; one that is in the page but not shown does not.
+  await page.evaluate(() => {
+    const viewer = document.createElement('dialog')
+    viewer.id = 'test-viewer'
+    viewer.append(Object.assign(document.createElement('button'), { textContent: 'Close viewer' }))
+    const hidden = Object.assign(document.createElement('div'), { id: 'test-hidden-dialog', hidden: true })
+    hidden.setAttribute('role', 'dialog')
+    hidden.setAttribute('aria-modal', 'true')
+    document.body.append(viewer, hidden)
+    viewer.showModal()
+  })
+  await page.keyboard.press('Control+b')
+  await expect(sidebar(page)).toBeVisible()
+  await page.evaluate(() => document.getElementById('test-viewer').close())
+  await reading(page).focus()
+  await page.keyboard.press('Control+b')
+  await expect(sidebar(page)).toHaveCount(0)
+  await page.keyboard.press('Control+b')
+  await expect(sidebar(page)).toBeVisible()
+
+  // A rich text field keeps ⌘B for bold.
+  await page.evaluate(() => {
+    const field = Object.assign(document.createElement('div'), { id: 'test-rich-text', contentEditable: 'true', textContent: 'rich text' })
+    document.body.append(field)
+    field.focus()
+  })
+  await page.keyboard.press('Control+b')
+  await expect(sidebar(page)).toBeVisible()
+  await expect(page.locator('#test-rich-text')).toBeFocused()
+})
+
+test('on a Mac the sidebar key is ⌘B, and Ctrl+B is left to the text field', async ({ page }) => {
+  await page.addInitScript(() => Object.defineProperty(Navigator.prototype, 'platform', { get: () => 'MacIntel', configurable: true }))
+  await login(page)
+  await mockTools(page)
+  await openDocument(page)
+  const hide = sidebar(page).getByRole('button', { name: 'Hide sidebar', exact: true })
+  await expect(hide).toHaveAttribute('aria-keyshortcuts', 'Meta+B')
+  await expect(hide).toHaveAttribute('title', 'Hide sidebar (⌘B)')
+  await reading(page).focus()
+  expect(await sendKey(page, { key: 'b', code: 'KeyB', ctrlKey: true })).toBe(false)
+  await expect(sidebar(page)).toBeVisible()
+  await page.keyboard.press('Meta+b')
+  await expect(sidebar(page)).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Show sidebar', exact: true })).toHaveAttribute('title', 'Show sidebar (⌘B)')
+  await page.keyboard.press('Meta+b')
+  await expect(sidebar(page)).toBeVisible()
 })
 
 test('the table of contents is a switch in the view menu, widens the document when off, and steps aside with the AI assistant', async ({ page }) => {
@@ -161,10 +303,37 @@ test('390px keeps the navigation drawer whatever the sidebar setting, and the vi
   await noOverflow(page)
 })
 
+test('under 768px the sidebar key opens and closes the navigation drawer, and leaves the sidebar setting alone', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await login(page)
+  await mockTools(page)
+  await openDocument(page)
+  const menu = page.getByRole('button', { name: 'Open document navigation', exact: true })
+  await expect(menu).toHaveAttribute('aria-keyshortcuts', 'Control+B')
+  await expect(menu).toHaveAttribute('title', 'Open document navigation (Ctrl+B)')
+  const drawer = page.getByRole('dialog', { name: 'Document navigation', exact: true })
+  await reading(page).focus()
+  await page.keyboard.press('Control+b')
+  await expect(drawer).toBeVisible()
+  await expect(drawer.getByRole('navigation', { name: 'Project documents', exact: true })).toBeVisible()
+  await page.keyboard.press('Control+b')
+  await expect(drawer).toHaveCount(0)
+  await expect(reading(page)).toBeFocused()
+  expect(await storedView(page)).toBeNull()
+  // Widened, the same key works the sidebar again.
+  await page.setViewportSize({ width: 1440, height: 1000 })
+  await expect(sidebar(page)).toBeVisible()
+  await page.keyboard.press('Control+b')
+  await expect(sidebar(page)).toHaveCount(0)
+  await expect(drawer).toHaveCount(0)
+})
+
 test('a shared document offers the view menu but no sidebar controls', async ({ page }) => {
   await page.goto('/s/review-document-link-only')
   await expect(page.getByRole('heading', { name: heading, exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: /sidebar/ })).toHaveCount(0)
+  // The sidebar key is left to the browser.
+  expect(await sendKey(page, { key: 'b', code: 'KeyB', ctrlKey: true })).toBe(false)
   await expect(outline(page)).toBeVisible()
   await openMenu(page)
   await option(page, 'Table of contents').click()

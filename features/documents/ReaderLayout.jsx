@@ -11,7 +11,11 @@ import DocumentOutline from './DocumentOutline.jsx'
 import ViewMenu from './ViewMenu.jsx'
 import { ShareButton } from './DocumentActions.jsx'
 import { useReaderView } from './use-reader-view.js'
+import { dialogOverPage, useSidebarShortcut, useSidebarShortcutLabel } from './use-sidebar-shortcut.js'
 import styles from './reader.module.css'
+
+// Narrower than this the sidebar gives way to the navigation drawer (reader.module.css).
+const NARROW = '(max-width: 767px)'
 
 function useClaudeInfo(enabled) {
   const [info, setInfo] = useState(null)
@@ -61,6 +65,11 @@ export default function ReaderLayout({ slug, docSlug }) {
   const chatTriggerRef = useRef(null)
   const hideSidebarRef = useRef(null)
   const showSidebarRef = useRef(null)
+  const asideRef = useRef(null)
+  const expandRef = useRef(null)
+  const navigationOpenRef = useRef(false)
+  useEffect(() => { navigationOpenRef.current = navigationOpen }, [navigationOpen])
+  const sidebarShortcut = useSidebarShortcutLabel()
   const wideChat = useWideChat()
 
   useEffect(() => {
@@ -88,6 +97,24 @@ export default function ReaderLayout({ slug, docSlug }) {
     toggleView('sidebar')
     requestAnimationFrame(() => counterpart.current?.focus({ preventScroll: true }))
   }
+
+  // ⌘B (Ctrl+B elsewhere) does what the sidebar's buttons do. Focus stays where it was, unless it was in the part
+  // that goes away: then it moves to the control that brings it back, and a field there is left the way a click
+  // elsewhere leaves it (a rename is saved). Under 768px the list lives in the drawer, so the key opens and closes
+  // the drawer. While another dialog covers the page the key does nothing.
+  const toggleSidebarByKey = useCallback(() => {
+    if (navigationOpenRef.current) { setNavigationOpen(false); return }
+    if (dialogOverPage()) return
+    if (window.matchMedia(NARROW).matches) { setNavigationOpen(true); return }
+    const leaving = asideRef.current || expandRef.current
+    const counterpart = asideRef.current ? showSidebarRef : hideSidebarRef
+    const focused = document.activeElement
+    const handOver = focused instanceof HTMLElement && !!leaving?.contains(focused)
+    if (handOver) focused.blur()
+    toggleView('sidebar')
+    if (handOver) requestAnimationFrame(() => counterpart.current?.focus({ preventScroll: true }))
+  }, [toggleView])
+  useSidebarShortcut(authed ? toggleSidebarByKey : null)
 
   useEffect(() => {
     // A refresh of the current document does not reset reading position.
@@ -129,19 +156,21 @@ export default function ReaderLayout({ slug, docSlug }) {
 
   return <div className={`${styles.shell} ${authed ? '' : styles.guestShell} ${authed && !view.sidebar ? styles.sidebarHidden : ''} ${chatVisible && wideChat ? styles.withChat : ''}`}>
     <a href="#document-content" className={styles.skipLink}>Skip to content</a>
-    {sidebarShown && <aside className={styles.sidebar}>
-      <DocumentNavigation {...navigationProps} onCollapse={() => toggleSidebar(showSidebarRef)} collapseButtonRef={hideSidebarRef} />
+    {sidebarShown && <aside ref={asideRef} className={styles.sidebar}>
+      <DocumentNavigation {...navigationProps} onCollapse={() => toggleSidebar(showSidebarRef)} collapseButtonRef={hideSidebarRef} collapseShortcut={sidebarShortcut} />
     </aside>}
     <div className={styles.readingArea}>
       <header className={styles.readerHeader}>
         <div className={styles.headerContext}>
           {authed ? <>
             <div className={styles.mobileMenu}>
-              <IconButton icon="menu" label="Open document navigation" onClick={() => setNavigationOpen(true)} />
+              <IconButton icon="menu" label="Open document navigation" title={`Open document navigation (${sidebarShortcut.label})`}
+                aria-keyshortcuts={sidebarShortcut.keys} onClick={() => setNavigationOpen(true)} />
               <SearchButton onClick={openSearch} />
             </div>
-            {!view.sidebar && <div className={styles.sidebarExpand}>
-              <IconButton ref={showSidebarRef} icon="panelLeft" label="Show sidebar" onClick={() => toggleSidebar(hideSidebarRef)} />
+            {!view.sidebar && <div ref={expandRef} className={styles.sidebarExpand}>
+              <IconButton ref={showSidebarRef} icon="panelLeft" label="Show sidebar" title={`Show sidebar (${sidebarShortcut.label})`}
+                aria-keyshortcuts={sidebarShortcut.keys} onClick={() => toggleSidebar(hideSidebarRef)} />
               <a href="/" className={styles.headerBrand} aria-label="MOA project home"><Brand compact /></a>
               <SearchButton onClick={openSearch} />
             </div>}
