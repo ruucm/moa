@@ -71,7 +71,8 @@ const isPublicPath = (p) =>
   p === '/favicon.ico' || p === '/icon.png' || p === '/apple-icon.png' || // home screen icons — Safari fetches them without cookies
   p === '/manifest.webmanifest' // the web app manifest is also requested without cookies
 
-// Is the path allowed by the share scope? — only the page, the doc API, media the doc references, and review proxies
+// Is the path allowed by the share scope? — only the page, the doc API, media the doc references, and review proxies.
+// A media entry ending in / is a folder of public/ (a prefix); any other is one file at its root.
 const shareAllows = (scope, p) => {
   const enc1 = encodeURI
   if (p === `/p/${scope.s}` || p === `/p/${scope.s}/${scope.d}`) return true
@@ -79,7 +80,11 @@ const shareAllows = (scope, p) => {
   if (p === '/api/doc' || p === '/api/projects') return true // the handler re-restricts by scope
   let dec = p
   try { dec = decodeURIComponent(p) } catch {}
-  for (const m of scope.m || []) if (dec.startsWith(m)) return true
+  dec = dec.normalize('NFC') // a Korean file name may be spelled decomposed (NFD) on one side
+  for (const m of scope.m || []) {
+    const n = String(m).normalize('NFC')
+    if (n.endsWith('/') ? dec.startsWith(n) : dec === n) return true
+  }
   for (const a of scope.a || []) if (dec === a || dec.startsWith(a + '/')) return true
   return false
 }

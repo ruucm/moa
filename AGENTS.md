@@ -73,8 +73,12 @@ npm run add-user -- <email> <name> <pw> admin   # add an account directly (users
 The **🔗 Share** button in a doc's sidebar copies a share URL (`/s/<token>`). The recipient
 sees **that one document only** — other docs, projects, APIs and media are blocked.
 
-- Creating a share scans the doc source and whitelists only the media paths it uses
-  (`/<slug>/…`) plus any configured proxies for embeds.
+- The guest loads only the media the page uses: the top-level `public/` folders (or root files)
+  named in the doc source and in everything it imports by a relative path (`../src/*.jsx`
+  components, their JSON/CSV data, raw `.md`), plus the review proxies the `.mdx` itself names
+  (`api="/studio"`). The scope is read again whenever a guest cookie is minted (opening
+  `/s/<token>`, loading the page), so media added to the page after sharing opens on reload.
+  Code: `lib/shares.mjs` (`docScope`), checked in `middleware.js`.
 - Link previews in chat apps: scrapers often refuse og:images on non-standard ports. If you
   care, port-forward external 80 → 5001 and set `MOA_PUBLIC_ORIGIN=http://<public-host>`
   in `.env.local` to pin the OG base URL (otherwise the request Host is used).
@@ -82,7 +86,7 @@ sees **that one document only** — other docs, projects, APIs and media are blo
   (already-issued guest media cookies expire within 6h).
 - API: `GET /api/share` list · `POST /api/share {slug,doc}` create (token reused, scope
   rescanned) · `POST /api/share/remove {token}` revoke.
-- Guest cookie: 6h signed cookie, renewed on each doc open while the token lives.
+- Guest cookie: 6h signed cookie, renewed (scope included) on each doc open while the token lives.
 
 ## Registering external projects
 

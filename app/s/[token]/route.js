@@ -3,7 +3,7 @@
 //   the req.url host can't be trusted when started with -H 0.0.0.0).
 // Crawlers (link scrapers from chat apps e.g. KakaoTalk, Facebook, etc.): respond 200 with HTML containing OG meta (title/description/thumbnail).
 //   The thumbnail is served by /s/<token>/og, which is accessible without cookies.
-import { findShare, shareOg } from '../../../lib/shares.mjs'
+import { findShare, shareOg, guestScope } from '../../../lib/shares.mjs'
 import { isOwner, shareSetCookie, SHARE_TTL } from '../../../lib/auth.mjs'
 
 const redirect = (path, headers = {}) =>
@@ -51,9 +51,7 @@ ${og.image.dims ? `<meta property="og:image:width" content="${og.image.dims.w}">
 
   const dest = `/p/${encodeURIComponent(share.slug)}/${encodeURIComponent(share.doc)}`
   if (isOwner(req)) return redirect(dest)
-  const cookie = shareSetCookie({
-    t: share.token, s: share.slug, d: share.doc,
-    m: share.media || [], a: share.api || [], exp: Date.now() + SHARE_TTL,
-  })
+  // The media scope is read from the doc's sources now — what the page shows today, imports included.
+  const cookie = shareSetCookie(guestScope(share, Date.now() + SHARE_TTL))
   return redirect(dest, { 'Set-Cookie': cookie })
 }

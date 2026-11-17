@@ -4,7 +4,7 @@
 import { docPath } from '../../../lib/content.mjs'
 import { bundleDoc } from '../../../lib/bundle.mjs'
 import { readShareScope, shareSetCookie, SHARE_TTL } from '../../../lib/auth.mjs'
-import { findShare } from '../../../lib/shares.mjs'
+import { findShare, guestScope } from '../../../lib/shares.mjs'
 import { j, getAuth } from '../../../lib/api.mjs'
 import { canAccessProject } from '../../../lib/users.mjs'
 
@@ -27,10 +27,8 @@ export async function GET(req) {
     if (!share) return j({ error: 'This share link has been revoked or expired.' }, 403)
     if (share.slug !== slug || share.doc !== doc)
       return j({ error: 'Access denied.' }, 403)
-    refreshCookie = shareSetCookie({
-      t: share.token, s: share.slug, d: share.doc,
-      m: share.media || [], a: share.api || [], exp: Date.now() + SHARE_TTL,
-    })
+    // Renewed with the scope read again, so media the page gained since the link was opened loads after a reload.
+    refreshCookie = shareSetCookie(guestScope(share, Date.now() + SHARE_TTL))
   }
 
   const abs = docPath(slug, doc)
