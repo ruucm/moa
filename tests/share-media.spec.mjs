@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test'
 import fs from 'node:fs'
+import http from 'node:http'
 import path from 'node:path'
 import { reviewRoot } from '../scripts/review-fixtures.mjs'
 import { login } from './review-session.mjs'
@@ -7,7 +8,7 @@ import { login } from './review-session.mjs'
 // A shared page shows the media its imported components and data files name, not only what the .mdx names itself —
 // a gallery component with its list of photos is the usual case. The guest scope is read from the sources whenever
 // the cookie is minted, so media added after sharing opens on the next load. A guest still gets nothing else from
-// public/.
+// public/, and a dot segment (%2F..%2F, %2E%2E) cannot carry a path past the gate.
 // The review server serves this checkout's public/ — the test writes its own folders there and removes them.
 const pub = path.resolve('public')
 const docs = path.join(reviewRoot, 'projects', 'moa-design')
@@ -35,6 +36,14 @@ export function Gallery() {
 }
 `
 const write = (file, text) => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, text) }
+
+// A request sent with its path exactly as written — fetch and Playwright resolve %2E%2E before sending.
+const raw = (base, rawPath, cookie) => new Promise((resolve, reject) => {
+  const u = new URL(base)
+  const req = http.get({ host: u.hostname, port: u.port, path: rawPath, headers: cookie ? { cookie } : {} }, (res) => { res.resume(); resolve(res.statusCode) })
+  req.on('error', reject)
+  req.setTimeout(15000, () => req.destroy(new Error('timeout')))
+})
 
 test.describe('shared page media', () => {
   const sharesFile = path.join(reviewRoot, 'shares.json')
@@ -79,8 +88,21 @@ test.describe('shared page media', () => {
     await expect(view.getByRole('heading', { name: 'Shared media', exact: true })).toBeVisible()
     await loaded(['one', 'two', 'three', 'top', 'four'])
 
-    // Nothing outside the scope.
+    // Nothing outside the scope — asked for directly, through an encoded slash, or behind a dot segment.
     expect((await view.request.get('/review-share-private/secret.svg')).status()).toBe(401)
+    const cookie = (await guest.cookies()).filter((c) => c.name === 'moa_share').map((c) => `${c.name}=${c.value}`).join('; ')
+    expect(cookie).not.toBe('')
+    expect(await raw(baseURL, '/review-share-gallery/one.svg', cookie)).toBe(200)
+    expect(await raw(baseURL, '/review-share-gallery%2F..%2Freview-share-private%2Fsecret.svg', cookie)).toBe(400)
+    expect(await raw(baseURL, '/review-share-gallery/..%2freview-share-private/secret.svg', cookie)).toBe(400)
     await guest.close()
+  })
+
+  test('a dot segment never carries a request past the gate', async ({ baseURL }) => {
+    expect(await raw(baseURL, '/review-share-private/secret.svg')).toBe(401)
+    expect(await raw(baseURL, '/_next/%2E%2E/review-share-private/secret.svg')).toBe(401)
+    expect(await raw(baseURL, '/_next/static/%2e%2e/%2e%2e/review-share-private/secret.svg')).toBe(401)
+    expect(await raw(baseURL, '/s/x%2F..%2F..%2Freview-share-private%2Fsecret.svg')).toBe(400)
+    expect(await raw(baseURL, '/join/x%2F%2E%2E%2F..%2Freview-share-private/secret.svg')).toBe(400)
   })
 })

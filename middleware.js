@@ -71,6 +71,14 @@ const isPublicPath = (p) =>
   p === '/favicon.ico' || p === '/icon.png' || p === '/apple-icon.png' || // home screen icons — Safari fetches them without cookies
   p === '/manifest.webmanifest' // the web app manifest is also requested without cookies
 
+// A dot segment — written out (/a/../b), percent-encoded (%2E%2E) or behind an encoded slash (a%2F..%2Fb).
+// Next resolves it before it serves a public/ file, so the file served is not the one the checked path names:
+// /<shared folder>%2F..%2F<other folder>/x.jpg passed a share scope, /s/x%2F..%2F..%2F<folder>/x.jpg passed as a
+// public path, and /_next/%2E%2E/<folder>/x.jpg skipped the gate as a build asset — each handed out any file in
+// public/. Browsers resolve dot segments before they send a request, so only a hand-made URL has one.
+const hasDotSegment = (p) =>
+  /(?:^|[/\\])\.\.?(?:[/\\]|$)/.test(p.replace(/%2e/gi, '.').replace(/%2f/gi, '/').replace(/%5c/gi, '\\'))
+
 // Is the path allowed by the share scope? — only the page, the doc API, media the doc references, and review proxies.
 // A media entry ending in / is a folder of public/ (a prefix); any other is one file at its root.
 const shareAllows = (scope, p) => {
@@ -92,6 +100,8 @@ const shareAllows = (scope, p) => {
 export async function middleware(req) {
   if (process.env.MOA_NO_AUTH === '1') return NextResponse.next()
   const p = req.nextUrl.pathname
+  if (hasDotSegment(p)) return new NextResponse('Bad request', { status: 400 })
+  if (p.startsWith('/_next/')) return NextResponse.next() // build assets — app code, not content
   if (isPublicPath(p)) return NextResponse.next()
 
   if (!process.env.MOA_SECRET) {
@@ -121,6 +131,8 @@ export async function middleware(req) {
 }
 
 export const config = {
-  // Exclude only _next static assets (app code, not content) — public media, APIs, and pages are all checked
-  matcher: ['/((?!_next/).*)'],
+  // Every request — /_next/ build assets too, since this pattern is matched against the path before its dot segments
+  // are resolved: leaving /_next/ out let /_next/%2E%2E/<folder>/x.jpg reach public/ unchecked. Build assets pass
+  // right through above.
+  matcher: ['/:path*'],
 }

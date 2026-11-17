@@ -79,6 +79,8 @@ sees **that one document only** — other docs, projects, APIs and media are blo
   (`api="/studio"`). The scope is read again whenever a guest cookie is minted (opening
   `/s/<token>`, loading the page), so media added to the page after sharing opens on reload.
   Code: `lib/shares.mjs` (`docScope`), checked in `middleware.js`.
+- A path with a dot segment (`/a/../b`, `%2E%2E`, `a%2F..%2Fb`) gets a 400 before any check —
+  Next resolves it to another `public/` file than the one the gate looked at.
 - Link previews in chat apps: scrapers often refuse og:images on non-standard ports. If you
   care, port-forward external 80 → 5001 and set `MOA_PUBLIC_ORIGIN=http://<public-host>`
   in `.env.local` to pin the OG base URL (otherwise the request Host is used).
